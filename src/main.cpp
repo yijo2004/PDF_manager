@@ -3,14 +3,11 @@
 #include "imgui_impl_opengl3.h"
 #include <stdio.h>
 
-// Define this before including glfw3.h
-#define GL_SILENCE_DEPRECATION 
-#include <GLFW/glfw3.h> 
+#define GL_SILENCE_DEPRECATION
+#include <GLFW/glfw3.h>
 
-// ### PDFium Header
 #include <fpdfview.h>
 
-// Simple error callback for GLFW
 static void glfw_error_callback(int error, const char* description)
 {
     fprintf(stderr, "GLFW Error %d: %s\n", error, description);
@@ -18,55 +15,41 @@ static void glfw_error_callback(int error, const char* description)
 
 int main(int, char**)
 {
-    // -----------------------------------------------------------------------
-    // 1. Setup GLFW (Windowing System)
-    // -----------------------------------------------------------------------
+    // Initialize GLFW windowing system
     glfwSetErrorCallback(glfw_error_callback);
     if (!glfwInit())
         return 1;
 
-    // Decide GL+GLSL versions
-    // For Windows/Linux, GL 3.0 + GLSL 130 is usually sufficient and safest.
     const char* glsl_version = "#version 130";
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
 
-    // Create window with graphics context
     GLFWwindow* window = glfwCreateWindow(1280, 720, "My PDF Viewer", nullptr, nullptr);
     if (window == nullptr)
         return 1;
     glfwMakeContextCurrent(window);
-    glfwSwapInterval(1); // Enable vsync
+    glfwSwapInterval(1);
 
-    // -----------------------------------------------------------------------
-    // 2. Initialize PDFium (The PDF Library)
-    // -----------------------------------------------------------------------
-    // We must initialize the library once before loading any documents.
+    // Initialize PDFium library
     FPDF_LIBRARY_CONFIG config;
     config.version = 2;
     config.m_pUserFontPaths = nullptr;
     config.m_pIsolate = nullptr;
     config.m_v8EmbedderSlot = 0;
-
     FPDF_InitLibraryWithConfig(&config);
     printf("PDFium Initialized successfully!\n");
 
-    // -----------------------------------------------------------------------
-    // 3. Setup ImGui Context
-    // -----------------------------------------------------------------------
+    // Setup ImGui context and configure features
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO(); (void)io;
-    
-    // Enable useful features
-    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
-    io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;         // Enable Docking
-    io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;       // Enable Multi-Viewport / Platform Windows
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+    io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+    io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
 
-    // Setup ImGui style
     ImGui::StyleColorsDark();
 
-    // Tweak WindowRounding/WindowBg so platform windows look identical to regular ones.
+    // Adjust style for multi-viewport support
     if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
     {
         ImGuiStyle& style = ImGui::GetStyle();
@@ -74,53 +57,41 @@ int main(int, char**)
         style.Colors[ImGuiCol_WindowBg].w = 1.0f;
     }
 
-    // Setup Platform/Renderer backends
+    // Initialize ImGui backends
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init(glsl_version);
 
-    // -----------------------------------------------------------------------
-    // 4. Main Application Loop
-    // -----------------------------------------------------------------------
+    // Main application loop
     while (!glfwWindowShouldClose(window))
     {
-        // Poll and handle events (inputs, window resize, etc.)
         glfwPollEvents();
 
-        // Start the ImGui frame
+        // Begin ImGui frame
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
-        // --- Create a fullscreen DockSpace ---
-        // This allows you to dock windows to the main application background
+        // Create dockable workspace
         ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport());
 
-        // --- Your Application Code Here ---
-        
-        // 1. A simple Control Window
+        // Application UI
         ImGui::Begin("Status");
         ImGui::Text("PDFium Status: Running");
         ImGui::Text("FPS: %.1f", io.Framerate);
         ImGui::End();
 
-        // 2. The ImGui Demo (Very useful for learning widgets)
         ImGui::ShowDemoWindow();
 
-        // ----------------------------------
-
-        // Rendering
+        // Render frame
         ImGui::Render();
         int display_w, display_h;
         glfwGetFramebufferSize(window, &display_w, &display_h);
         glViewport(0, 0, display_w, display_h);
         glClearColor(0.45f, 0.55f, 0.60f, 1.00f);
         glClear(GL_COLOR_BUFFER_BIT);
-        
-        // Render draw data
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
-        // Update and Render additional Platform Windows
-        // (Platform functions may change the current OpenGL context, so we save/restore it)
+        // Handle multi-viewport rendering
         if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
         {
             GLFWwindow* backup_current_context = glfwGetCurrentContext();
@@ -132,16 +103,11 @@ int main(int, char**)
         glfwSwapBuffers(window);
     }
 
-    // -----------------------------------------------------------------------
-    // 5. Cleanup
-    // -----------------------------------------------------------------------
+    // Cleanup resources
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
-
-    // Destroy PDFium Library
     FPDF_DestroyLibrary();
-
     glfwDestroyWindow(window);
     glfwTerminate();
 
