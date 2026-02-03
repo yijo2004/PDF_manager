@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.14)
 project(PdfViewer)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 
 # -----------------------------------------------------------------------------
 # 1. Setup Paths (Manual Layout)
@@ -52,4 +52,5 @@ add_executable(PdfApp src/main.cpp)
 
 # Link everything together
 # We link "glfw3" (the name of the .lib file inside lib-vc2022) and "opengl32" (standard Windows lib)
-target_link_libraries(PdfApp PRIVATE imgui ${PDFIUM_LIB} glfw3 opengl32)
+# "comdlg32" is needed for the Windows file dialog
+target_link_libraries(PdfApp PRIVATE imgui ${PDFIUM_LIB} glfw3 opengl32 comdlg32)

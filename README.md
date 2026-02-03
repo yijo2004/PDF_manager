@@ -29,10 +29,7 @@ Ensure your `vendor/` folder is set up correctly:
     ```
 
 3.  **Setup Runtime (Crucial)**
-    Copy the PDFium DLL to your executable folder:
-    ```powershell
-    copy ..\vendor\pdfium\bin\pdfium.dll .\Debug\
-    ```
+    Copy the PDFium DLL (pdfium.dll) and font TTL file (NotoSerifKR-Regular.ttf) to your executable folder
 
 4.  **Run**
     ```powershell

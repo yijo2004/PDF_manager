@@ -35,3 +35,4 @@ Thumbs.db
 
 # Keep the DLLs inside the vendor folder
 !vendor/**/bin/*.dll
+!pdfium.dll
