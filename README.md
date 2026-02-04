@@ -29,7 +29,7 @@ Ensure your `vendor/` folder is set up correctly:
     ```
 
 3.  **Setup Runtime (Crucial)**
-    Copy the PDFium DLL (pdfium.dll) and font TTL file (NotoSerifKR-Regular.ttf) to your executable folder
+    Copy the PDFium DLL (pdfium.dll) and font TTL file (font.ttf) to your executable folder
 
 4.  **Run**
     ```powershell

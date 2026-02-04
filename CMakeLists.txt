@@ -48,9 +48,30 @@ target_include_directories(imgui PUBLIC ${IMGUI_DIR} ${IMGUI_DIR}/backends)
 # -----------------------------------------------------------------------------
 # 3. Setup Main Executable
 # -----------------------------------------------------------------------------
-add_executable(PdfApp src/main.cpp)
+set(APP_SOURCES
+    src/main.cpp
+    src/pdf_viewer.cpp
+    src/pdf_library.cpp
+    src/file_dialog.cpp
+)
+
+set(APP_HEADERS
+    src/pdf_viewer.h
+    src/pdf_library.h
+    src/file_dialog.h
+)
+
+# Remove WIN32 to make console show up
+add_executable(PdfApp WIN32 ${APP_SOURCES} ${APP_HEADERS})
+
+# Include src directory for our headers
+target_include_directories(PdfApp PRIVATE ${CMAKE_SOURCE_DIR}/src)
 
 # Link everything together
 # We link "glfw3" (the name of the .lib file inside lib-vc2022) and "opengl32" (standard Windows lib)
 # "comdlg32" is needed for the Windows file dialog
-target_link_libraries(PdfApp PRIVATE imgui ${PDFIUM_LIB} glfw3 opengl32 comdlg32)
+# "ole32" and "shell32" are needed for the folder picker (IFileDialog)
+target_link_libraries(PdfApp PRIVATE imgui ${PDFIUM_LIB} glfw3 opengl32 comdlg32 ole32 shell32)
+if(MSVC)
+    set_target_properties(PdfApp PROPERTIES LINK_FLAGS "/ENTRY:mainCRTStartup")
+endif()
