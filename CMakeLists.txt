@@ -53,12 +53,14 @@ set(APP_SOURCES
     src/pdf_viewer.cpp
     src/pdf_library.cpp
     src/file_dialog.cpp
+    src/setlist_gen.cpp
 )
 
 set(APP_HEADERS
     src/pdf_viewer.h
     src/pdf_library.h
     src/file_dialog.h
+    src/setlist_gen.h
 )
 
 # Remove WIN32 to make console show up
