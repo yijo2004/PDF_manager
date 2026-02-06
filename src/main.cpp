@@ -1,29 +1,28 @@
 /**
  * PDF Viewer Application
- * 
+ *
  * A simple PDF viewer built with ImGui, GLFW, OpenGL, and PDFium.
  */
-
-#include "imgui.h"
-#include "imgui_impl_glfw.h"
-#include "imgui_impl_opengl3.h"
 
 #include <GLFW/glfw3.h>
 #include <fpdfview.h>
 
-#include "pdf_viewer.h"
-#include "pdf_library.h"
-#include "file_dialog.h"
-
-#include <cstdio>
-#include <cstdint>
 #include <algorithm>
+#include <cstdint>
+#include <cstdio>
+
+#include "file_dialog.h"
+#include "imgui.h"
+#include "imgui_impl_glfw.h"
+#include "imgui_impl_opengl3.h"
+#include "pdf_library.h"
+#include "pdf_viewer.h"
 
 // =============================================================================
 // Error Callbacks
 // =============================================================================
 
-static void GlfwErrorCallback(int error, const char* description)
+static void GlfwErrorCallback(int error, const char *description)
 {
     fprintf(stderr, "GLFW Error %d: %s\n", error, description);
 }
@@ -32,7 +31,7 @@ static void GlfwErrorCallback(int error, const char* description)
 // Application Initialization
 // =============================================================================
 
-static GLFWwindow* InitWindow(int width, int height, const char* title)
+static GLFWwindow *InitWindow(int width, int height, const char *title)
 {
     glfwSetErrorCallback(GlfwErrorCallback);
     if (!glfwInit())
@@ -41,7 +40,8 @@ static GLFWwindow* InitWindow(int width, int height, const char* title)
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
 
-    GLFWwindow* window = glfwCreateWindow(width, height, title, nullptr, nullptr);
+    GLFWwindow *window =
+        glfwCreateWindow(width, height, title, nullptr, nullptr);
     if (window)
     {
         glfwMakeContextCurrent(window);
@@ -60,18 +60,18 @@ static void InitPDFium()
     FPDF_InitLibraryWithConfig(&config);
 }
 
-static void InitImGui(GLFWwindow* window, const char* glslVersion)
+static void InitImGui(GLFWwindow *window, const char *glslVersion)
 {
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
-    
-    ImGuiIO& io = ImGui::GetIO();
+
+    ImGuiIO &io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
     io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
 
     // Load custom font with Korean support
-    ImFont* font = io.Fonts->AddFontFromFileTTF(
+    ImFont *font = io.Fonts->AddFontFromFileTTF(
         "font.ttf", 18.0f, nullptr, io.Fonts->GetGlyphRangesKorean());
     if (!font)
     {
@@ -84,7 +84,7 @@ static void InitImGui(GLFWwindow* window, const char* glslVersion)
     // Adjust style for multi-viewport
     if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
     {
-        ImGuiStyle& style = ImGui::GetStyle();
+        ImGuiStyle &style = ImGui::GetStyle();
         style.WindowRounding = 0.0f;
         style.Colors[ImGuiCol_WindowBg].w = 1.0f;
     }
@@ -93,7 +93,7 @@ static void InitImGui(GLFWwindow* window, const char* glslVersion)
     ImGui_ImplOpenGL3_Init(glslVersion);
 }
 
-static void Shutdown(GLFWwindow* window)
+static void Shutdown(GLFWwindow *window)
 {
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
@@ -125,7 +125,7 @@ static const float SPLITTER_THICKNESS = 6.0f;
 // UI Rendering
 // =============================================================================
 
-static void RenderLibraryPanel(PdfLibrary& library, PdfViewer& viewer, int& selectedIndex, const ImGuiViewport* viewport)
+static void RenderLibraryPanel(PdfLibrary &library, PdfViewer &viewer, int &selectedIndex, const ImGuiViewport *viewport)
 {
     float sidebarWidth = viewport->WorkSize.x * g_sidebarWidthRatio;
     float controlsHeight = viewport->WorkSize.y * g_controlsHeightRatio;
@@ -151,62 +151,88 @@ static void RenderLibraryPanel(PdfLibrary& library, PdfViewer& viewer, int& sele
 
     if (library.IsLoaded())
     {
-        // Refresh button
-        if (ImGui::Button("Refresh", ImVec2(-1, 0)))
+        if (ImGui::BeginTabBar("File Bar"))
         {
-            library.Refresh();
-        }
-
-        ImGui::Separator();
-
-        // Folder info
-        ImGui::TextColored(ImVec4(0.7f, 0.9f, 1.0f, 1.0f), "Folder:");
-        ImGui::TextWrapped("%s", library.GetFolderName().c_str());
-        ImGui::Text("%zu PDF files", library.GetFileCount());
-
-        ImGui::Separator();
-
-        // File list
-        if (library.GetFileCount() > 0)
-        {
-            ImGui::BeginChild("FileList", ImVec2(0, 0), true);
-            
-            const auto& files = library.GetFiles();
-            for (size_t i = 0; i < files.size(); i++)
+            //  All files tab
+            if (ImGui::BeginTabItem("All Files"))
             {
-                const auto& entry = files[i];
-                bool isSelected = (static_cast<int>(i) == selectedIndex);
-
-                // Highlight the currently selected/open file
-                if (isSelected)
+                // Refresh button
+                if (ImGui::Button("Refresh", ImVec2(-1, 0)))
                 {
-                    ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.3f, 0.5f, 0.7f, 1.0f));
-                    ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.4f, 0.6f, 0.8f, 1.0f));
-                    ImGui::PopStyleColor(2);
+                    library.Refresh();
                 }
 
-                if (ImGui::Selectable(entry.filename.c_str(), isSelected, ImGuiSelectableFlags_AllowDoubleClick))
+                ImGui::Separator();
+
+                // Folder info
+                ImGui::TextColored(ImVec4(0.7f, 0.9f, 1.0f, 1.0f), "Folder:");
+                ImGui::TextWrapped("%s", library.GetFolderName().c_str());
+                ImGui::Text("%zu PDF files", library.GetFileCount());
+
+                ImGui::Separator();
+
+                // File list
+                if (library.GetFileCount() > 0)
                 {
-                    selectedIndex = static_cast<int>(i);
-                    
-                    if (viewer.GetFilename() != entry.filename)
+                    ImGui::BeginChild("FileList", ImVec2(0, 0), true);
+
+                    const auto &files = library.GetFiles();
+                    for (size_t i = 0; i < files.size(); i++)
                     {
-                        viewer.Load(entry.fullPath);
+                        const auto &entry = files[i];
+                        bool isSelected =
+                            (static_cast<int>(i) == selectedIndex);
+
+                        // Highlight the currently selected/open file
+                        if (isSelected)
+                        {
+                            ImGui::PushStyleColor(
+                                ImGuiCol_Header,
+                                ImVec4(0.3f, 0.5f, 0.7f, 1.0f));
+                            ImGui::PushStyleColor(
+                                ImGuiCol_HeaderHovered,
+                                ImVec4(0.4f, 0.6f, 0.8f, 1.0f));
+                            ImGui::PopStyleColor(2);
+                        }
+
+                        if (ImGui::Selectable(entry.filename.c_str(), isSelected, ImGuiSelectableFlags_AllowDoubleClick))
+                        {
+                            selectedIndex = static_cast<int>(i);
+
+                            if (viewer.GetFilename() != entry.filename)
+                            {
+                                viewer.Load(entry.fullPath);
+                            }
+                        }
+
+                        // Tooltip with full path
+                        if (ImGui::IsItemHovered())
+                        {
+                            ImGui::SetTooltip("%s", entry.fullPath.c_str());
+                        }
                     }
+
+                    ImGui::EndChild();
+                }
+                else
+                {
+                    ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "No PDF files found");
                 }
 
-                // Tooltip with full path
-                if (ImGui::IsItemHovered())
+                ImGui::EndTabItem();
+            }
+            if (library.GetFileCount() > 0)
+            {
+                //  Tab for file set addition
+                if (ImGui::BeginTabItem("Setlists"))
                 {
-                    ImGui::SetTooltip("%s", entry.fullPath.c_str());
+                    ImGui::Text("In Progress");
+
+                    ImGui::EndTabItem();
                 }
             }
 
-            ImGui::EndChild();
-        }
-        else
-        {
-            ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "No PDF files found");
+            ImGui::EndTabBar();
         }
     }
     else
@@ -217,7 +243,7 @@ static void RenderLibraryPanel(PdfLibrary& library, PdfViewer& viewer, int& sele
     ImGui::End();
 }
 
-static void RenderControlsPanel(PdfViewer& viewer, const ImGuiIO& io, const ImGuiViewport* viewport)
+static void RenderControlsPanel(PdfViewer &viewer, const ImGuiIO &io, const ImGuiViewport *viewport)
 {
     float sidebarWidth = viewport->WorkSize.x * g_sidebarWidthRatio;
     float controlsHeight = viewport->WorkSize.y * g_controlsHeightRatio;
@@ -232,15 +258,16 @@ static void RenderControlsPanel(PdfViewer& viewer, const ImGuiIO& io, const ImGu
         // File info
         ImGui::TextColored(ImVec4(0.7f, 0.9f, 1.0f, 1.0f), "Current File:");
         ImGui::TextWrapped("%s", viewer.GetFilename().c_str());
-        
+
         ImGui::Separator();
-        
+
         // Page navigation
         ImGui::Text("Page: %d / %d", viewer.GetCurrentPage() + 1, viewer.GetPageCount());
 
         // Navigation buttons
         ImGui::BeginDisabled(!viewer.CanGoPrevious());
-        if (ImGui::Button("< Prev", ImVec2(80, 0)) || ImGui::IsKeyPressed(ImGuiKey_LeftArrow))
+        if (ImGui::Button("< Prev", ImVec2(80, 0)) ||
+            ImGui::IsKeyPressed(ImGuiKey_LeftArrow))
         {
             viewer.PreviousPage();
         }
@@ -297,55 +324,55 @@ static void RenderControlsPanel(PdfViewer& viewer, const ImGuiIO& io, const ImGu
 
     ImGui::Separator();
     ImGui::Text("FPS: %.1f", io.Framerate);
-    
+
     ImGui::End();
 }
 
 //  Vibe coded, have no idea how this works but it works
-static void RenderSplitters(ImGuiIO& io, const ImGuiViewport* viewport)
+static void RenderSplitters(ImGuiIO &io, const ImGuiViewport *viewport)
 {
     float sidebarWidth = viewport->WorkSize.x * g_sidebarWidthRatio;
     float controlsHeight = viewport->WorkSize.y * g_controlsHeightRatio;
-    
+
     // Colors for splitters
     ImVec4 splitterColor = ImVec4(0.3f, 0.3f, 0.3f, 1.0f);
     ImVec4 splitterHoveredColor = ImVec4(0.5f, 0.5f, 0.5f, 1.0f);
     ImVec4 splitterActiveColor = ImVec4(0.6f, 0.7f, 0.9f, 1.0f);
-    
-    // Horizontal splitter (resize sidebar width) - vertical bar on right edge of sidebar
+
+    // Horizontal splitter (resize sidebar width) - vertical bar on right edge
+    // of sidebar
     {
-        ImVec2 splitterPos = ImVec2(viewport->WorkPos.x + sidebarWidth - SPLITTER_THICKNESS / 2, viewport->WorkPos.y);
-        
+        ImVec2 splitterPos =
+            ImVec2(viewport->WorkPos.x + sidebarWidth - SPLITTER_THICKNESS / 2, viewport->WorkPos.y);
+
         // Draw the splitter bar directly using the draw list
-        ImDrawList* drawList = ImGui::GetForegroundDrawList();
+        ImDrawList *drawList = ImGui::GetForegroundDrawList();
         ImVec2 p1 = splitterPos;
         ImVec2 p2 = ImVec2(splitterPos.x + SPLITTER_THICKNESS, splitterPos.y + viewport->WorkSize.y);
-        
+
         // Determine color based on state
         ImVec4 color = splitterColor;
         if (g_draggingHorizontal)
             color = splitterActiveColor;
-        else if (io.MousePos.x >= p1.x && io.MousePos.x <= p2.x && 
-                 io.MousePos.y >= p1.y && io.MousePos.y <= p2.y)
+        else if (io.MousePos.x >= p1.x && io.MousePos.x <= p2.x && io.MousePos.y >= p1.y && io.MousePos.y <= p2.y)
             color = splitterHoveredColor;
-        
+
         drawList->AddRectFilled(p1, p2, ImGui::ColorConvertFloat4ToU32(color));
-        
+
         // Check for hover and drag
-        bool isHovered = (io.MousePos.x >= p1.x && io.MousePos.x <= p2.x && 
-                          io.MousePos.y >= p1.y && io.MousePos.y <= p2.y);
-        
+        bool isHovered = (io.MousePos.x >= p1.x && io.MousePos.x <= p2.x && io.MousePos.y >= p1.y && io.MousePos.y <= p2.y);
+
         if (isHovered || g_draggingHorizontal)
         {
             ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
         }
-        
+
         // Start dragging
         if (isHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
         {
             g_draggingHorizontal = true;
         }
-        
+
         // Continue dragging
         if (g_draggingHorizontal)
         {
@@ -360,41 +387,40 @@ static void RenderSplitters(ImGuiIO& io, const ImGuiViewport* viewport)
             }
         }
     }
-    
-    // Vertical splitter (resize controls/library height split) - horizontal bar between panels
+
+    // Vertical splitter (resize controls/library height split) - horizontal bar
+    // between panels
     {
         ImVec2 splitterPos = ImVec2(viewport->WorkPos.x, viewport->WorkPos.y + controlsHeight - SPLITTER_THICKNESS / 2);
-        
+
         // Draw the splitter bar directly using the draw list
-        ImDrawList* drawList = ImGui::GetForegroundDrawList();
+        ImDrawList *drawList = ImGui::GetForegroundDrawList();
         ImVec2 p1 = splitterPos;
         ImVec2 p2 = ImVec2(splitterPos.x + sidebarWidth, splitterPos.y + SPLITTER_THICKNESS);
-        
+
         // Determine color based on state
         ImVec4 color = splitterColor;
         if (g_draggingVertical)
             color = splitterActiveColor;
-        else if (io.MousePos.x >= p1.x && io.MousePos.x <= p2.x && 
-                 io.MousePos.y >= p1.y && io.MousePos.y <= p2.y)
+        else if (io.MousePos.x >= p1.x && io.MousePos.x <= p2.x && io.MousePos.y >= p1.y && io.MousePos.y <= p2.y)
             color = splitterHoveredColor;
-        
+
         drawList->AddRectFilled(p1, p2, ImGui::ColorConvertFloat4ToU32(color));
-        
+
         // Check for hover and drag
-        bool isHovered = (io.MousePos.x >= p1.x && io.MousePos.x <= p2.x && 
-                          io.MousePos.y >= p1.y && io.MousePos.y <= p2.y);
-        
+        bool isHovered = (io.MousePos.x >= p1.x && io.MousePos.x <= p2.x && io.MousePos.y >= p1.y && io.MousePos.y <= p2.y);
+
         if (isHovered || g_draggingVertical)
         {
             ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNS);
         }
-        
+
         // Start dragging
         if (isHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
         {
             g_draggingVertical = true;
         }
-        
+
         // Continue dragging
         if (g_draggingVertical)
         {
@@ -411,7 +437,8 @@ static void RenderSplitters(ImGuiIO& io, const ImGuiViewport* viewport)
     }
 }
 
-static void RenderViewerPanel(const PdfViewer& viewer, const ImGuiViewport* viewport)
+static void RenderViewerPanel(const PdfViewer &viewer,
+                              const ImGuiViewport *viewport)
 {
     float sidebarWidth = viewport->WorkSize.x * g_sidebarWidthRatio;
     float viewerWidth = viewport->WorkSize.x - sidebarWidth;
@@ -452,19 +479,17 @@ static void RenderViewerPanel(const PdfViewer& viewer, const ImGuiViewport* view
         if (offsetX > 0)
             ImGui::SetCursorPosX(ImGui::GetCursorPosX() + offsetX);
 
-        ImGui::Image((ImTextureID)(void*)(uintptr_t)texture,
-                     ImVec2(displayWidth, displayHeight));
+        ImGui::Image((ImTextureID)(void *)(uintptr_t)texture, ImVec2(displayWidth, displayHeight));
     }
     else
     {
         // Placeholder text
         ImVec2 availSize = ImGui::GetContentRegionAvail();
-        const char* placeholder = "Select a PDF from the library to view";
+        const char *placeholder = "Select a PDF from the library to view";
         ImVec2 textSize = ImGui::CalcTextSize(placeholder);
-        ImGui::SetCursorPos(ImVec2(
-            (availSize.x - textSize.x) * 0.5f + ImGui::GetCursorPosX(),
-            (availSize.y - textSize.y) * 0.5f + ImGui::GetCursorPosY()
-        ));
+        ImGui::SetCursorPos(
+            ImVec2((availSize.x - textSize.x) * 0.5f + ImGui::GetCursorPosX(),
+                   (availSize.y - textSize.y) * 0.5f + ImGui::GetCursorPosY()));
         ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "%s", placeholder);
     }
 
@@ -475,10 +500,10 @@ static void RenderViewerPanel(const PdfViewer& viewer, const ImGuiViewport* view
 // Main Application
 // =============================================================================
 
-int main(int, char**)
+int main(int, char **)
 {
     // Initialize systems
-    GLFWwindow* window = InitWindow(1280, 720, "PDF Manager");
+    GLFWwindow *window = InitWindow(1280, 720, "PDF Manager");
     if (!window)
         return 1;
 
@@ -506,8 +531,8 @@ int main(int, char**)
         ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport());
 
         // Render UI panels
-        ImGuiIO& io = ImGui::GetIO();
-        ImGuiViewport* viewport = ImGui::GetMainViewport();
+        ImGuiIO &io = ImGui::GetIO();
+        ImGuiViewport *viewport = ImGui::GetMainViewport();
         RenderControlsPanel(viewer, io, viewport);
         RenderLibraryPanel(library, viewer, selectedFileIndex, viewport);
         RenderViewerPanel(viewer, viewport);
@@ -525,7 +550,7 @@ int main(int, char**)
         // Handle multi-viewport
         if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
         {
-            GLFWwindow* backupContext = glfwGetCurrentContext();
+            GLFWwindow *backupContext = glfwGetCurrentContext();
             ImGui::UpdatePlatformWindows();
             ImGui::RenderPlatformWindowsDefault();
             glfwMakeContextCurrent(backupContext);

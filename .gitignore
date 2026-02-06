@@ -25,6 +25,7 @@ Makefile
 *.vcxproj.filters
 *.user
 .idea/
+.clang-format
 
 # --- OS System Files ---
 .DS_Store
