@@ -193,9 +193,9 @@ void PdfViewer::RenderPageToTexture()
     // Fill background white
     FPDFBitmap_FillRect(bitmap, 0, 0, renderWidth, renderHeight, 0xFFFFFFFF);
 
-    // Render the page
+    // Render the page. LCD text rendering improves perceived sharpness on screen.
     FPDF_RenderPageBitmap(bitmap, m_page, 0, 0, renderWidth, renderHeight, 0,
-                          FPDF_ANNOT);
+                          FPDF_ANNOT | FPDF_LCD_TEXT);
 
     // Convert BGRA to RGBA for OpenGL
     for (int i = 0; i < renderWidth * renderHeight; i++)
@@ -213,7 +213,8 @@ void PdfViewer::RenderPageToTexture()
 
     glBindTexture(GL_TEXTURE_2D, m_texture);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    // Use nearest-neighbor when magnifying to keep text edges crisper.
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, renderWidth, renderHeight, 0,

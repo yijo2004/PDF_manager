@@ -28,6 +28,10 @@ static void GlfwErrorCallback(int error, const char *description)
     fprintf(stderr, "GLFW Error %d: %s\n", error, description);
 }
 
+static void ApplyCustomTheme();
+static bool PrimaryButton(const char *label, const ImVec2 &size);
+static void SectionTitle(const char *title);
+
 // =============================================================================
 // Application Initialization
 // =============================================================================
@@ -80,13 +84,13 @@ static void InitImGui(GLFWwindow *window, const char *glslVersion)
         io.Fonts->AddFontDefault();
     }
 
-    ImGui::StyleColorsDark();
+    ApplyCustomTheme();
 
     // Adjust style for multi-viewport
     if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
     {
         ImGuiStyle &style = ImGui::GetStyle();
-        style.WindowRounding = 0.0f;
+        style.WindowRounding = 6.0f;
         style.Colors[ImGuiCol_WindowBg].w = 1.0f;
     }
 
@@ -122,6 +126,63 @@ static bool g_draggingHorizontal = false;
 static bool g_draggingVertical = false;
 static const float SPLITTER_THICKNESS = 6.0f;
 
+static void ApplyCustomTheme()
+{
+    ImGuiStyle &style = ImGui::GetStyle();
+    ImGui::StyleColorsDark();
+
+    style.WindowRounding = 8.0f;
+    style.ChildRounding = 8.0f;
+    style.FrameRounding = 6.0f;
+    style.GrabRounding = 6.0f;
+    style.ScrollbarRounding = 8.0f;
+    style.TabRounding = 6.0f;
+    style.WindowPadding = ImVec2(12.0f, 10.0f);
+    style.FramePadding = ImVec2(8.0f, 6.0f);
+    style.ItemSpacing = ImVec2(8.0f, 6.0f);
+    style.ItemInnerSpacing = ImVec2(6.0f, 4.0f);
+    style.SeparatorTextPadding = ImVec2(8.0f, 3.0f);
+    style.WindowBorderSize = 1.0f;
+    style.ChildBorderSize = 1.0f;
+    style.FrameBorderSize = 1.0f;
+
+    ImVec4 *colors = style.Colors;
+    colors[ImGuiCol_WindowBg] = ImVec4(0.09f, 0.10f, 0.13f, 1.00f);
+    colors[ImGuiCol_ChildBg] = ImVec4(0.12f, 0.13f, 0.17f, 0.95f);
+    colors[ImGuiCol_Border] = ImVec4(0.26f, 0.29f, 0.35f, 0.70f);
+    colors[ImGuiCol_TitleBg] = ImVec4(0.13f, 0.14f, 0.19f, 1.00f);
+    colors[ImGuiCol_TitleBgActive] = ImVec4(0.18f, 0.22f, 0.30f, 1.00f);
+    colors[ImGuiCol_Header] = ImVec4(0.22f, 0.29f, 0.39f, 0.70f);
+    colors[ImGuiCol_HeaderHovered] = ImVec4(0.31f, 0.41f, 0.56f, 0.80f);
+    colors[ImGuiCol_HeaderActive] = ImVec4(0.37f, 0.49f, 0.66f, 1.00f);
+    colors[ImGuiCol_Button] = ImVec4(0.22f, 0.30f, 0.41f, 0.80f);
+    colors[ImGuiCol_ButtonHovered] = ImVec4(0.30f, 0.41f, 0.57f, 1.00f);
+    colors[ImGuiCol_ButtonActive] = ImVec4(0.37f, 0.50f, 0.68f, 1.00f);
+    colors[ImGuiCol_Tab] = ImVec4(0.15f, 0.18f, 0.24f, 0.95f);
+    colors[ImGuiCol_TabHovered] = ImVec4(0.28f, 0.36f, 0.50f, 1.00f);
+    colors[ImGuiCol_TabActive] = ImVec4(0.24f, 0.32f, 0.44f, 1.00f);
+    colors[ImGuiCol_Separator] = ImVec4(0.25f, 0.29f, 0.38f, 1.00f);
+}
+
+static bool PrimaryButton(const char *label, const ImVec2 &size)
+{
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.25f, 0.43f, 0.70f, 0.95f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.33f, 0.53f, 0.82f, 1.00f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.22f, 0.39f, 0.64f, 1.00f));
+    bool clicked = ImGui::Button(label, size);
+    ImGui::PopStyleColor(3);
+    return clicked;
+}
+
+static void SectionTitle(const char *title)
+{
+    ImGui::Spacing();
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.72f, 0.86f, 1.0f, 1.0f));
+    ImGui::TextUnformatted(title);
+    ImGui::PopStyleColor();
+    ImGui::Separator();
+}
+
 // =============================================================================
 // UI Rendering
 // =============================================================================
@@ -144,8 +205,9 @@ static void RenderLibraryPanel(PdfLibrary &library,
 
     ImGui::Begin("PDF Library", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize);
 
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(10.0f, 7.0f));
     // Folder selection button
-    if (ImGui::Button("Open Folder...", ImVec2(-1, 30)))
+    if (PrimaryButton("Open Folder...", ImVec2(-1, 32)))
     {
         std::string folderPath = FileDialog::OpenFolder();
         if (!folderPath.empty())
@@ -156,6 +218,7 @@ static void RenderLibraryPanel(PdfLibrary &library,
             viewer.Close();
         }
     }
+    ImGui::PopStyleVar();
 
     if (library.IsLoaded())
     {
@@ -164,20 +227,18 @@ static void RenderLibraryPanel(PdfLibrary &library,
             //  All files tab
             if (ImGui::BeginTabItem("All Files"))
             {
-                // Refresh button
-                if (ImGui::Button("Refresh", ImVec2(-1, 0)))
+                if (ImGui::Button("Refresh Library", ImVec2(-1, 0)))
                 {
                     library.Refresh();
                 }
+                SectionTitle("Library");
 
-                ImGui::Separator();
-
-                // Folder info
-                ImGui::TextColored(ImVec4(0.7f, 0.9f, 1.0f, 1.0f), "Folder:");
+                ImGui::BeginChild("FolderInfoCard", ImVec2(0, 78), true);
+                ImGui::TextColored(ImVec4(0.71f, 0.86f, 1.0f, 1.0f), "Current Folder");
                 ImGui::TextWrapped("%s", library.GetFolderName().c_str());
-                ImGui::Text("%zu PDF files", library.GetFileCount());
-
-                ImGui::Separator();
+                ImGui::TextDisabled("%zu PDF files", library.GetFileCount());
+                ImGui::EndChild();
+                ImGui::Spacing();
 
                 // File list
                 if (library.GetFileCount() > 0)
@@ -196,14 +257,17 @@ static void RenderLibraryPanel(PdfLibrary &library,
                         {
                             ImGui::PushStyleColor(
                                 ImGuiCol_Header,
-                                ImVec4(0.3f, 0.5f, 0.7f, 1.0f));
+                                ImVec4(0.30f, 0.46f, 0.66f, 0.90f));
                             ImGui::PushStyleColor(
                                 ImGuiCol_HeaderHovered,
-                                ImVec4(0.4f, 0.6f, 0.8f, 1.0f));
-                            ImGui::PopStyleColor(2);
+                                ImVec4(0.37f, 0.55f, 0.78f, 0.95f));
+                            ImGui::PushStyleColor(
+                                ImGuiCol_HeaderActive,
+                                ImVec4(0.42f, 0.62f, 0.86f, 1.0f));
                         }
 
-                        if (ImGui::Selectable(entry.filename.c_str(), isSelected, ImGuiSelectableFlags_AllowDoubleClick))
+                        if (ImGui::Selectable(entry.filename.c_str(), isSelected,
+                                              ImGuiSelectableFlags_AllowDoubleClick))
                         {
                             selectedIndex = static_cast<int>(i);
 
@@ -213,6 +277,8 @@ static void RenderLibraryPanel(PdfLibrary &library,
                                 viewer.Load(entry.fullPath);
                             }
                         }
+                        if (isSelected)
+                            ImGui::PopStyleColor(3);
 
                         // Tooltip with full path
                         if (ImGui::IsItemHovered())
@@ -225,7 +291,7 @@ static void RenderLibraryPanel(PdfLibrary &library,
                 }
                 else
                 {
-                    ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "No PDF files found");
+                    ImGui::TextColored(ImVec4(0.62f, 0.64f, 0.70f, 1.0f), "No PDF files found");
                 }
 
                 ImGui::EndTabItem();
@@ -233,6 +299,7 @@ static void RenderLibraryPanel(PdfLibrary &library,
             //  Tab for file set addition (always visible when library is loaded)
             if (ImGui::BeginTabItem("Setlists"))
             {
+                SectionTitle("Create Setlist");
                 // --- Create new setlist ---
                 static char newSetlistName[64] = "";
                 ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 70.0f);
@@ -240,7 +307,7 @@ static void RenderLibraryPanel(PdfLibrary &library,
                     IM_ARRAYSIZE(newSetlistName),
                     ImGuiInputTextFlags_EnterReturnsTrue);
                 ImGui::SameLine();
-                if (ImGui::Button("Create", ImVec2(-1, 0)) || enterPressed)
+                if (PrimaryButton("Create", ImVec2(-1, 0)) || enterPressed)
                 {
                     size_t newIndex = setlistManager.CreateSetlist(newSetlistName);
                     selectedSetlistIndex = static_cast<int>(newIndex);
@@ -249,6 +316,7 @@ static void RenderLibraryPanel(PdfLibrary &library,
                 }
 
                 // Save / Load buttons
+                SectionTitle("Persistence");
                 {
                     static bool showSaveStatus = false;
                     static bool saveOk = false;
@@ -300,13 +368,12 @@ static void RenderLibraryPanel(PdfLibrary &library,
                     }
                 }
 
-                ImGui::Separator();
-
                 // --- Setlist list ---
+                SectionTitle("Setlists");
                 bool isActiveSetlist = setlistManager.IsActive() &&
                     selectedSetlistIndex == setlistManager.GetActiveSetlistIndex();
 
-                float setlistListHeight = 100.0f;
+                float setlistListHeight = 120.0f;
                 ImGui::BeginChild("SetlistList", ImVec2(0, setlistListHeight), true);
                 const auto &setlists = setlistManager.GetSetlists();
                 for (size_t i = 0; i < setlists.size(); i++)
@@ -347,7 +414,7 @@ static void RenderLibraryPanel(PdfLibrary &library,
                     float halfWidth = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) * 0.5f;
 
                     ImGui::BeginDisabled(!canActivate);
-                    if (ImGui::Button(isActiveSetlist ? "Reactivate" : "Activate",
+                    if (PrimaryButton(isActiveSetlist ? "Reactivate" : "Activate",
                                       ImVec2(halfWidth, 0)))
                     {
                         setlistManager.ActivateSetlist(
@@ -384,7 +451,7 @@ static void RenderLibraryPanel(PdfLibrary &library,
                     ImGui::EndDisabled();
                 }
 
-                ImGui::Separator();
+                SectionTitle("Setlist Items");
 
                 // --- Selected setlist contents ---
                 if (selectedSetlist)
@@ -426,7 +493,7 @@ static void RenderLibraryPanel(PdfLibrary &library,
                             ImGui::EndCombo();
                         }
                         ImGui::SameLine();
-                        if (ImGui::Button("Add", ImVec2(-1, 0)))
+                        if (PrimaryButton("Add", ImVec2(-1, 0)))
                         {
                             if (comboFileIndex >= 0 &&
                                 comboFileIndex < static_cast<int>(files.size()))
@@ -499,7 +566,7 @@ static void RenderLibraryPanel(PdfLibrary &library,
 
                     // Row 1: Open | Move Up | Move Down
                     ImGui::BeginDisabled(!hasItemSelected);
-                    if (ImGui::Button("Open", ImVec2(thirdWidth, 0)))
+                    if (PrimaryButton("Open", ImVec2(thirdWidth, 0)))
                     {
                         setlistManager.JumpToItem(
                             static_cast<size_t>(selectedSetlistIndex),
@@ -597,43 +664,43 @@ static void RenderControlsPanel(PdfViewer &viewer,
 
         if (activeSetlist)
         {
-            ImGui::PushStyleColor(ImGuiCol_Text,
-                ImVec4(0.4f, 1.0f, 0.4f, 1.0f));
-            ImGui::Text("Setlist Mode");
-            ImGui::PopStyleColor();
+            SectionTitle("Playback");
+            ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.14f, 0.20f, 0.17f, 0.80f));
+            ImGui::BeginChild("ActiveSetlistCard", ImVec2(0, 90), true);
+            ImGui::TextColored(ImVec4(0.52f, 0.95f, 0.63f, 1.0f), "Setlist mode is active");
             ImGui::TextWrapped("%s", activeSetlist->GetName().c_str());
-            ImGui::Text("Item %d / %zu",
-                setlistManager.GetActiveItemIndex() + 1,
-                activeSetlist->GetItemCount());
+            ImGui::TextDisabled("Item %d / %zu",
+                                setlistManager.GetActiveItemIndex() + 1,
+                                activeSetlist->GetItemCount());
             if (ImGui::Button("Deactivate Setlist", ImVec2(-1, 0)))
             {
                 setlistManager.Deactivate();
             }
-            ImGui::Separator();
+            ImGui::EndChild();
+            ImGui::PopStyleColor();
         }
     }
 
     if (viewer.IsLoaded())
     {
-        // File info
-        ImGui::TextColored(ImVec4(0.7f, 0.9f, 1.0f, 1.0f), "Current File:");
+        SectionTitle("Document");
+        ImGui::TextColored(ImVec4(0.71f, 0.86f, 1.0f, 1.0f), "Current File");
         ImGui::TextWrapped("%s", viewer.GetFilename().c_str());
+        ImGui::TextDisabled("%d pages", viewer.GetPageCount());
 
-        ImGui::Separator();
-
-        // Page navigation
+        SectionTitle("Navigation");
         ImGui::Text("Page: %d / %d", viewer.GetCurrentPage() + 1, viewer.GetPageCount());
 
-        // Navigation buttons
         bool canGoPrevious = setlistManager.IsActive()
                                  ? setlistManager.CanGoPrevious(viewer)
                                  : viewer.CanGoPrevious();
         bool canGoNext = setlistManager.IsActive()
                              ? setlistManager.CanGoNext(viewer)
                              : viewer.CanGoNext();
+        float halfWidth = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) * 0.5f;
 
         ImGui::BeginDisabled(!canGoPrevious);
-        if (ImGui::Button("< Prev", ImVec2(80, 0)) ||
+        if (PrimaryButton("< Prev", ImVec2(halfWidth, 0)) ||
             ImGui::IsKeyPressed(ImGuiKey_LeftArrow))
         {
             if (setlistManager.IsActive())
@@ -646,7 +713,8 @@ static void RenderControlsPanel(PdfViewer &viewer,
         ImGui::SameLine();
 
         ImGui::BeginDisabled(!canGoNext);
-        if (ImGui::Button("Next >", ImVec2(80, 0)) || ImGui::IsKeyPressed(ImGuiKey_RightArrow))
+        if (PrimaryButton("Next >", ImVec2(-1, 0)) ||
+            ImGui::IsKeyPressed(ImGuiKey_RightArrow))
         {
             if (setlistManager.IsActive())
                 setlistManager.Next(viewer);
@@ -655,24 +723,18 @@ static void RenderControlsPanel(PdfViewer &viewer,
         }
         ImGui::EndDisabled();
 
-        // Zoom controls
-        ImGui::Separator();
+        SectionTitle("Zoom");
         ImGui::Text("Zoom: %.0f%%", viewer.GetZoom() * 100.0f);
+        float thirdWidth = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x * 2.0f) / 3.0f;
 
-        if (ImGui::Button("-", ImVec2(40, 0)))
-        {
+        if (ImGui::Button("-", ImVec2(thirdWidth, 0)))
             viewer.ZoomOut();
-        }
         ImGui::SameLine();
-        if (ImGui::Button("+", ImVec2(40, 0)))
-        {
+        if (ImGui::Button("+", ImVec2(thirdWidth, 0)))
             viewer.ZoomIn();
-        }
         ImGui::SameLine();
-        if (ImGui::Button("Reset", ImVec2(60, 0)))
-        {
+        if (ImGui::Button("Reset", ImVec2(-1, 0)))
             viewer.ResetZoom();
-        }
 
         // Ctrl+Scroll zoom
         if (io.KeyCtrl && io.MouseWheel != 0.0f)
@@ -683,34 +745,34 @@ static void RenderControlsPanel(PdfViewer &viewer,
                 viewer.ZoomOut(1.1f);
         }
 
-        ImGui::Separator();
+        SectionTitle("Actions");
         if (ImGui::Button("Close PDF", ImVec2(-1, 0)))
-        {
             viewer.Close();
-        }
     }
     else
     {
-        ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "No PDF loaded");
+        SectionTitle("Document");
+        ImGui::TextColored(ImVec4(0.62f, 0.64f, 0.70f, 1.0f), "No PDF loaded");
         ImGui::TextWrapped("Select a PDF from the library panel to view it.");
     }
 
+    ImGui::Spacing();
     ImGui::Separator();
-    ImGui::Text("FPS: %.1f", io.Framerate);
+    ImGui::TextDisabled("FPS: %.1f", io.Framerate);
 
     ImGui::End();
 }
 
-//  Vibe coded, have no idea how this works but it works
+// Manual splitters for sidebar width and controls/library height
 static void RenderSplitters(ImGuiIO &io, const ImGuiViewport *viewport)
 {
     float sidebarWidth = viewport->WorkSize.x * g_sidebarWidthRatio;
     float controlsHeight = viewport->WorkSize.y * g_controlsHeightRatio;
 
     // Colors for splitters
-    ImVec4 splitterColor = ImVec4(0.3f, 0.3f, 0.3f, 1.0f);
-    ImVec4 splitterHoveredColor = ImVec4(0.5f, 0.5f, 0.5f, 1.0f);
-    ImVec4 splitterActiveColor = ImVec4(0.6f, 0.7f, 0.9f, 1.0f);
+    ImVec4 splitterColor = ImVec4(0.20f, 0.25f, 0.32f, 0.85f);
+    ImVec4 splitterHoveredColor = ImVec4(0.31f, 0.40f, 0.52f, 0.95f);
+    ImVec4 splitterActiveColor = ImVec4(0.41f, 0.55f, 0.73f, 1.00f);
 
     // Horizontal splitter (resize sidebar width) - vertical bar on right edge
     // of sidebar
@@ -824,33 +886,41 @@ static void RenderViewerPanel(const PdfViewer &viewer,
 
     ImGui::Begin("PDF Viewer", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize);
 
+    if (viewer.IsLoaded())
+    {
+        ImGui::Text("%s", viewer.GetFilename().c_str());
+        ImGui::SameLine();
+        ImGui::TextDisabled("| %d pages | %.0f%%",
+                            viewer.GetPageCount(),
+                            viewer.GetZoom() * 100.0f);
+    }
+    else
+    {
+        ImGui::TextDisabled("No document loaded");
+    }
+    ImGui::Separator();
+
     GLuint texture = viewer.GetTexture();
     int texWidth = viewer.GetTextureWidth();
     int texHeight = viewer.GetTextureHeight();
 
+    ImGui::BeginChild("ViewerCanvas", ImVec2(0, 0), true,
+                      ImGuiWindowFlags_HorizontalScrollbar);
     if (texture && texWidth > 0 && texHeight > 0)
     {
         ImVec2 availSize = ImGui::GetContentRegionAvail();
 
-        // Calculate display size maintaining aspect ratio
-        float aspectRatio = static_cast<float>(texWidth) / static_cast<float>(texHeight);
-        float displayWidth = availSize.x;
-        float displayHeight = displayWidth / aspectRatio;
+        // Draw at native rendered size. Zoom changes render resolution/size in PdfViewer.
+        float displayWidth = static_cast<float>(texWidth);
+        float displayHeight = static_cast<float>(texHeight);
 
-        if (displayHeight > availSize.y)
-        {
-            displayHeight = availSize.y;
-            displayWidth = displayHeight * aspectRatio;
-        }
-
-        // Apply zoom to display (visual zoom, not re-render)
-        displayWidth *= viewer.GetZoom();
-        displayHeight *= viewer.GetZoom();
-
-        // Center the image
-        float offsetX = (availSize.x - displayWidth) * 0.5f;
-        if (offsetX > 0)
-            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + offsetX);
+        // Center image when it fits in the canvas
+        ImVec2 cursor = ImGui::GetCursorPos();
+        if (displayWidth < availSize.x)
+            cursor.x += (availSize.x - displayWidth) * 0.5f;
+        if (displayHeight < availSize.y)
+            cursor.y += (availSize.y - displayHeight) * 0.5f;
+        ImGui::SetCursorPos(cursor);
 
         ImGui::Image((ImTextureID)(void *)(uintptr_t)texture, ImVec2(displayWidth, displayHeight));
     }
@@ -863,8 +933,9 @@ static void RenderViewerPanel(const PdfViewer &viewer,
         ImGui::SetCursorPos(
             ImVec2((availSize.x - textSize.x) * 0.5f + ImGui::GetCursorPosX(),
                    (availSize.y - textSize.y) * 0.5f + ImGui::GetCursorPosY()));
-        ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "%s", placeholder);
+        ImGui::TextColored(ImVec4(0.55f, 0.58f, 0.64f, 1.0f), "%s", placeholder);
     }
+    ImGui::EndChild();
 
     ImGui::End();
 }
@@ -932,7 +1003,7 @@ int main(int, char **)
         int displayW, displayH;
         glfwGetFramebufferSize(window, &displayW, &displayH);
         glViewport(0, 0, displayW, displayH);
-        glClearColor(0.45f, 0.55f, 0.60f, 1.00f);
+        glClearColor(0.07f, 0.08f, 0.11f, 1.00f);
         glClear(GL_COLOR_BUFFER_BIT);
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
