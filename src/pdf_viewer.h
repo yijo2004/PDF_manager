@@ -90,6 +90,16 @@ public:
     // --- Document Info ---
     
     const std::string& GetFilename() const { return m_filename; }
+    
+    /**
+     * @brief Get the native page width in PDF points (72 DPI).
+     */
+    double GetPageNativeWidth() const { return m_pageNativeWidth; }
+    
+    /**
+     * @brief Get the native page height in PDF points (72 DPI).
+     */
+    double GetPageNativeHeight() const { return m_pageNativeHeight; }
 
 private:
     void RenderPageToTexture();
@@ -113,8 +123,16 @@ private:
     float m_zoomLevel = 1.0f;
     bool m_needsRender = false;
     std::string m_filename;
+    
+    // Native page dimensions (PDF points)
+    double m_pageNativeWidth = 0.0;
+    double m_pageNativeHeight = 0.0;
 
     // Zoom limits
     static constexpr float MIN_ZOOM = 0.1f;
     static constexpr float MAX_ZOOM = 5.0f;
+    
+    // Base render scale — renders texture at this multiple of native size
+    // for crisp display. Zoom only affects display, not render resolution.
+    static constexpr double BASE_RENDER_SCALE = 2.0;
 };

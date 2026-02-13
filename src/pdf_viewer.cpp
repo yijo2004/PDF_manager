@@ -84,6 +84,8 @@ void PdfViewer::Close()
     m_zoomLevel = 1.0f;
     m_needsRender = false;
     m_filename.clear();
+    m_pageNativeWidth = 0.0;
+    m_pageNativeHeight = 0.0;
 }
 
 void PdfViewer::CleanupTexture()
@@ -128,11 +130,8 @@ void PdfViewer::SetZoom(float zoom)
 {
     zoom = (zoom < MIN_ZOOM) ? MIN_ZOOM : (zoom > MAX_ZOOM) ? MAX_ZOOM
                                                             : zoom;
-    if (zoom != m_zoomLevel)
-    {
-        m_zoomLevel = zoom;
-        m_needsRender = true;
-    }
+    m_zoomLevel = zoom;
+    // Zoom is display-only; no re-render needed.
 }
 
 void PdfViewer::ZoomIn(float factor) { SetZoom(m_zoomLevel * factor); }
@@ -168,12 +167,15 @@ void PdfViewer::RenderPageToTexture()
         return;
     }
 
-    // Get page dimensions and apply zoom
+    // Get page dimensions and store native size
     double pageWidth = FPDF_GetPageWidth(m_page);
     double pageHeight = FPDF_GetPageHeight(m_page);
+    m_pageNativeWidth = pageWidth;
+    m_pageNativeHeight = pageHeight;
 
-    int renderWidth = static_cast<int>(pageWidth * m_zoomLevel);
-    int renderHeight = static_cast<int>(pageHeight * m_zoomLevel);
+    // Render at fixed high-quality scale (independent of display zoom)
+    int renderWidth = static_cast<int>(pageWidth * BASE_RENDER_SCALE);
+    int renderHeight = static_cast<int>(pageHeight * BASE_RENDER_SCALE);
 
     // Clamp to reasonable size
     const int MAX_TEXTURE_SIZE = 4096;

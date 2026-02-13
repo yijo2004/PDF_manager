@@ -51,6 +51,21 @@ void Setlist::Clear()
     m_items.clear();
 }
 
+static const std::string EMPTY_STRING;
+
+const std::string &Setlist::GetItemNotes(size_t index) const
+{
+    if (index >= m_items.size())
+        return EMPTY_STRING;
+    return m_items[index].notes;
+}
+
+void Setlist::SetItemNotes(size_t index, const std::string &notes)
+{
+    if (index < m_items.size())
+        m_items[index].notes = notes;
+}
+
 size_t SetlistManager::CreateSetlist(const std::string &name)
 {
     std::string finalName = name;
@@ -283,7 +298,7 @@ bool SetlistManager::SaveToFile(const std::string &filepath) const
         return false;
     }
 
-    out << "SETLISTS_V1\n";
+    out << "SETLISTS_V2\n";
 
     for (const auto &setlist : m_setlists)
     {
@@ -291,6 +306,26 @@ bool SetlistManager::SaveToFile(const std::string &filepath) const
         for (const auto &item : setlist.GetItems())
         {
             out << "ITEM:" << item.name << "\t" << item.fullPath << "\n";
+            if (!item.notes.empty())
+            {
+                // Encode notes: replace newlines with \n literal for safe
+                // single-line storage
+                std::string encoded = item.notes;
+                // Replace backslashes first to avoid double-encoding
+                for (size_t pos = 0;
+                     (pos = encoded.find('\\', pos)) != std::string::npos;
+                     pos += 2)
+                {
+                    encoded.replace(pos, 1, "\\\\");
+                }
+                for (size_t pos = 0;
+                     (pos = encoded.find('\n', pos)) != std::string::npos;
+                     pos += 2)
+                {
+                    encoded.replace(pos, 1, "\\n");
+                }
+                out << "NOTES:" << encoded << "\n";
+            }
         }
     }
 
@@ -310,8 +345,9 @@ bool SetlistManager::LoadFromFile(const std::string &filepath)
 
     std::string line;
 
-    // Check header
-    if (!std::getline(in, line) || line != "SETLISTS_V1")
+    // Check header — accept V1 or V2
+    if (!std::getline(in, line) ||
+        (line != "SETLISTS_V1" && line != "SETLISTS_V2"))
     {
         std::cerr << "[SetlistManager] Invalid save file format\n";
         return false;
@@ -346,6 +382,40 @@ bool SetlistManager::LoadFromFile(const std::string &filepath)
                 std::string path = rest.substr(tabPos + 1);
                 current->AddItem(name, path);
             }
+        }
+        else if (line.rfind("NOTES:", 0) == 0 && current &&
+                 current->GetItemCount() > 0)
+        {
+            // Notes for the most recently added item
+            std::string encoded = line.substr(6);
+            // Decode: \\n -> \n, \\\\ -> backslash
+            std::string decoded;
+            decoded.reserve(encoded.size());
+            for (size_t i = 0; i < encoded.size(); i++)
+            {
+                if (encoded[i] == '\\' && i + 1 < encoded.size())
+                {
+                    if (encoded[i + 1] == 'n')
+                    {
+                        decoded += '\n';
+                        i++;
+                    }
+                    else if (encoded[i + 1] == '\\')
+                    {
+                        decoded += '\\';
+                        i++;
+                    }
+                    else
+                    {
+                        decoded += encoded[i];
+                    }
+                }
+                else
+                {
+                    decoded += encoded[i];
+                }
+            }
+            current->SetItemNotes(current->GetItemCount() - 1, decoded);
         }
         // Skip unknown lines gracefully
     }

@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstdio>
+#include <cstring>
 
 #include "file_dialog.h"
 #include "imgui.h"
@@ -121,9 +122,14 @@ static const float MIN_SIDEBAR_RATIO = 0.15f;
 static const float MAX_SIDEBAR_RATIO = 0.5f;
 static const float MIN_PANEL_HEIGHT_RATIO = 0.15f;
 static const float MAX_PANEL_HEIGHT_RATIO = 0.85f;
+// Right sidebar (notes panel) width ratio
+static float g_notesSidebarWidthRatio = 0.20f;
+static const float MIN_NOTES_SIDEBAR_RATIO = 0.10f;
+static const float MAX_NOTES_SIDEBAR_RATIO = 0.40f;
 // Splitter drag state
 static bool g_draggingHorizontal = false;
 static bool g_draggingVertical = false;
+static bool g_draggingRightSplitter = false;
 static const float SPLITTER_THICKNESS = 6.0f;
 
 static void ApplyCustomTheme()
@@ -763,8 +769,9 @@ static void RenderControlsPanel(PdfViewer &viewer,
     ImGui::End();
 }
 
-// Manual splitters for sidebar width and controls/library height
-static void RenderSplitters(ImGuiIO &io, const ImGuiViewport *viewport)
+// Manual splitters for sidebar width, controls/library height, and notes sidebar
+static void RenderSplitters(ImGuiIO &io, const ImGuiViewport *viewport,
+                            bool showRightSplitter)
 {
     float sidebarWidth = viewport->WorkSize.x * g_sidebarWidthRatio;
     float controlsHeight = viewport->WorkSize.y * g_controlsHeightRatio;
@@ -870,13 +877,122 @@ static void RenderSplitters(ImGuiIO &io, const ImGuiViewport *viewport)
             }
         }
     }
+
+    // Right splitter (resize notes sidebar width) — only when notes panel is visible
+    if (showRightSplitter || g_draggingRightSplitter)
+    {
+        float notesSidebarWidth = viewport->WorkSize.x * g_notesSidebarWidthRatio;
+        float splitterX = viewport->WorkPos.x + viewport->WorkSize.x
+                          - notesSidebarWidth - SPLITTER_THICKNESS / 2;
+
+        ImDrawList *drawList = ImGui::GetForegroundDrawList();
+        ImVec2 p1 = ImVec2(splitterX, viewport->WorkPos.y);
+        ImVec2 p2 = ImVec2(splitterX + SPLITTER_THICKNESS,
+                            viewport->WorkPos.y + viewport->WorkSize.y);
+
+        ImVec4 color = splitterColor;
+        if (g_draggingRightSplitter)
+            color = splitterActiveColor;
+        else if (io.MousePos.x >= p1.x && io.MousePos.x <= p2.x &&
+                 io.MousePos.y >= p1.y && io.MousePos.y <= p2.y)
+            color = splitterHoveredColor;
+
+        drawList->AddRectFilled(p1, p2, ImGui::ColorConvertFloat4ToU32(color));
+
+        bool isHovered = (io.MousePos.x >= p1.x && io.MousePos.x <= p2.x &&
+                          io.MousePos.y >= p1.y && io.MousePos.y <= p2.y);
+
+        if (isHovered || g_draggingRightSplitter)
+            ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
+
+        if (isHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+            g_draggingRightSplitter = true;
+
+        if (g_draggingRightSplitter)
+        {
+            if (ImGui::IsMouseDown(ImGuiMouseButton_Left))
+            {
+                float rightEdge = viewport->WorkPos.x + viewport->WorkSize.x;
+                float newRatio = (rightEdge - io.MousePos.x) / viewport->WorkSize.x;
+                g_notesSidebarWidthRatio = (std::clamp)(newRatio,
+                    MIN_NOTES_SIDEBAR_RATIO, MAX_NOTES_SIDEBAR_RATIO);
+            }
+            else
+            {
+                g_draggingRightSplitter = false;
+            }
+        }
+    }
+}
+
+static void RenderNotesPanel(SetlistManager &setlistManager,
+                             const ImGuiViewport *viewport)
+{
+    if (!setlistManager.IsActive())
+        return;
+
+    Setlist *mutSetlist = setlistManager.GetSetlist(
+        static_cast<size_t>(setlistManager.GetActiveSetlistIndex()));
+    int activeIdx = setlistManager.GetActiveItemIndex();
+    if (!mutSetlist || activeIdx < 0 ||
+        activeIdx >= static_cast<int>(mutSetlist->GetItemCount()))
+        return;
+
+    float notesSidebarWidth = viewport->WorkSize.x * g_notesSidebarWidthRatio;
+    float panelHeight = viewport->WorkSize.y;
+    float notesX = viewport->WorkPos.x + viewport->WorkSize.x - notesSidebarWidth;
+
+    ImGui::SetNextWindowPos(ImVec2(notesX, viewport->WorkPos.y), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(notesSidebarWidth, panelHeight), ImGuiCond_Always);
+
+    ImGui::Begin("Notes", nullptr,
+                 ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse |
+                 ImGuiWindowFlags_NoResize);
+
+    const SetlistItem &item = mutSetlist->GetItems()[static_cast<size_t>(activeIdx)];
+    ImGui::TextColored(ImVec4(0.7f, 0.9f, 1.0f, 1.0f), "%s", item.name.c_str());
+    ImGui::TextDisabled("Item %d / %zu", activeIdx + 1, mutSetlist->GetItemCount());
+    ImGui::Separator();
+
+    static char notesBuf[4096] = "";
+    static int lastActiveSetlist = -1;
+    static int lastActiveItem = -1;
+
+    // Sync buffer when the active item changes
+    int curSetlist = setlistManager.GetActiveSetlistIndex();
+    if (curSetlist != lastActiveSetlist || activeIdx != lastActiveItem)
+    {
+        const std::string &notes =
+            mutSetlist->GetItemNotes(static_cast<size_t>(activeIdx));
+        size_t copyLen = notes.size();
+        if (copyLen >= sizeof(notesBuf))
+            copyLen = sizeof(notesBuf) - 1;
+        std::memcpy(notesBuf, notes.c_str(), copyLen);
+        notesBuf[copyLen] = '\0';
+        lastActiveSetlist = curSetlist;
+        lastActiveItem = activeIdx;
+    }
+
+    ImVec2 notesSize = ImVec2(-1, ImGui::GetContentRegionAvail().y);
+    if (ImGui::InputTextMultiline("##ItemNotes", notesBuf, sizeof(notesBuf),
+                                  notesSize))
+    {
+        mutSetlist->SetItemNotes(static_cast<size_t>(activeIdx),
+                                 std::string(notesBuf));
+    }
+
+    ImGui::End();
 }
 
 static void RenderViewerPanel(const PdfViewer &viewer,
+                              const SetlistManager &setlistManager,
                               const ImGuiViewport *viewport)
 {
     float sidebarWidth = viewport->WorkSize.x * g_sidebarWidthRatio;
-    float viewerWidth = viewport->WorkSize.x - sidebarWidth;
+    float notesSidebarWidth = setlistManager.IsActive()
+        ? viewport->WorkSize.x * g_notesSidebarWidthRatio
+        : 0.0f;
+    float viewerWidth = viewport->WorkSize.x - sidebarWidth - notesSidebarWidth;
     float panelHeight = viewport->WorkSize.y;
 
     ImVec2 viewerPos = ImVec2(viewport->WorkPos.x + sidebarWidth, viewport->WorkPos.y);
@@ -910,9 +1026,19 @@ static void RenderViewerPanel(const PdfViewer &viewer,
     {
         ImVec2 availSize = ImGui::GetContentRegionAvail();
 
-        // Draw at native rendered size. Zoom changes render resolution/size in PdfViewer.
-        float displayWidth = static_cast<float>(texWidth);
-        float displayHeight = static_cast<float>(texHeight);
+        // Compute fit-to-panel base size (aspect-ratio preserving)
+        float aspectRatio = static_cast<float>(texWidth) / static_cast<float>(texHeight);
+        float fitWidth = availSize.x;
+        float fitHeight = fitWidth / aspectRatio;
+        if (fitHeight > availSize.y)
+        {
+            fitHeight = availSize.y;
+            fitWidth = fitHeight * aspectRatio;
+        }
+
+        // Apply zoom on top of the fitted size
+        float displayWidth = fitWidth * viewer.GetZoom();
+        float displayHeight = fitHeight * viewer.GetZoom();
 
         // Center image when it fits in the canvas
         ImVec2 cursor = ImGui::GetCursorPos();
@@ -995,8 +1121,10 @@ int main(int, char **)
         RenderLibraryPanel(library, viewer, setlistManager,
                            selectedFileIndex, selectedSetlistIndex,
                            selectedSetlistItemIndex, viewport);
-        RenderViewerPanel(viewer, viewport);
-        RenderSplitters(io, viewport);
+        bool notesVisible = setlistManager.IsActive();
+        RenderNotesPanel(setlistManager, viewport);
+        RenderViewerPanel(viewer, setlistManager, viewport);
+        RenderSplitters(io, viewport, notesVisible);
 
         // Render frame
         ImGui::Render();

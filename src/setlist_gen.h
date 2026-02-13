@@ -13,6 +13,7 @@ struct SetlistItem
 {
     std::string name;
     std::string fullPath;
+    std::string notes;
 };
 
 /**
@@ -28,7 +29,22 @@ public:
     void SetName(const std::string &name) { m_name = name; }
 
     const std::vector<SetlistItem> &GetItems() const { return m_items; }
+    std::vector<SetlistItem> &GetItemsMut() { return m_items; }
     size_t GetItemCount() const { return m_items.size(); }
+
+    /**
+     * @brief Get the notes for an item by index.
+     * @param index Zero-based index of the item.
+     * @return The notes string, or empty string if index is out of range.
+     */
+    const std::string &GetItemNotes(size_t index) const;
+
+    /**
+     * @brief Set the notes for an item by index.
+     * @param index Zero-based index of the item.
+     * @param notes The notes text to set.
+     */
+    void SetItemNotes(size_t index, const std::string &notes);
 
     /**
      * @brief Add a PDF file to the end of the setlist from a library entry.
