@@ -78,7 +78,7 @@ static void InitImGui(GLFWwindow *window, const char *glslVersion)
 
     // Load custom font with Korean support
     ImFont *font = io.Fonts->AddFontFromFileTTF(
-        "font.ttf", 18.0f, nullptr, io.Fonts->GetGlyphRangesKorean());
+        "font.ttf", 22.0f, nullptr, io.Fonts->GetGlyphRangesKorean());
     if (!font)
     {
         printf("Failed to load font, using default.\n");
