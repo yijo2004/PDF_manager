@@ -50,6 +50,9 @@ target_include_directories(imgui PUBLIC ${IMGUI_DIR} ${IMGUI_DIR}/backends)
 # -----------------------------------------------------------------------------
 set(APP_SOURCES
     src/main.cpp
+    src/app_init.cpp
+    src/ui_helpers.cpp
+    src/ui_panels.cpp
     src/pdf_viewer.cpp
     src/pdf_library.cpp
     src/file_dialog.cpp
@@ -57,6 +60,9 @@ set(APP_SOURCES
 )
 
 set(APP_HEADERS
+    src/app_init.h
+    src/ui_helpers.h
+    src/ui_panels.h
     src/pdf_viewer.h
     src/pdf_library.h
     src/file_dialog.h
