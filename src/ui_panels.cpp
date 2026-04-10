@@ -74,13 +74,15 @@ void RenderLibraryPanel(PdfLibrary &library,
     }
     ImGui::PopStyleVar();
 
-    if (library.IsLoaded())
+    if (ImGui::BeginTabBar("File Bar"))
     {
-        if (ImGui::BeginTabBar("File Bar"))
+        //  All files tab
+        if (ImGui::BeginTabItem("All Files"))
         {
-            //  All files tab
-            if (ImGui::BeginTabItem("All Files"))
-            {
+            if (!library.IsLoaded()){
+                ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "Select a folder to browse PDFs");
+            }
+            else {
                 if (ImGui::Button("Refresh Library", ImVec2(-1, 0)))
                 {
                     library.Refresh();
@@ -118,7 +120,7 @@ void RenderLibraryPanel(PdfLibrary &library,
                         }
 
                         if (ImGui::Selectable(entry.filename.c_str(), isSelected,
-                                              ImGuiSelectableFlags_AllowDoubleClick))
+                                                ImGuiSelectableFlags_AllowDoubleClick))
                         {
                             selectedIndex = static_cast<int>(i);
 
@@ -144,351 +146,347 @@ void RenderLibraryPanel(PdfLibrary &library,
                 {
                     ImGui::TextColored(ImVec4(0.62f, 0.64f, 0.70f, 1.0f), "No PDF files found");
                 }
-
-                ImGui::EndTabItem();
             }
-            //  Tab for file set addition (always visible when library is loaded)
-            if (ImGui::BeginTabItem("Setlists"))
+
+            ImGui::EndTabItem();
+        }
+        //  Tab for file set addition (always visible when library is loaded)
+        if (ImGui::BeginTabItem("Setlists"))
+        {
+            SectionTitle("Create Setlist");
+            // --- Create new setlist ---
+            static char newSetlistName[64] = "";
+            ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 70.0f);
+            bool enterPressed = ImGui::InputText("##NewName", newSetlistName,
+                IM_ARRAYSIZE(newSetlistName),
+                ImGuiInputTextFlags_EnterReturnsTrue);
+            ImGui::SameLine();
+            if (PrimaryButton("Create", ImVec2(-1, 0)) || enterPressed)
             {
-                SectionTitle("Create Setlist");
-                // --- Create new setlist ---
-                static char newSetlistName[64] = "";
-                ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 70.0f);
-                bool enterPressed = ImGui::InputText("##NewName", newSetlistName,
-                    IM_ARRAYSIZE(newSetlistName),
-                    ImGuiInputTextFlags_EnterReturnsTrue);
+                size_t newIndex = setlistManager.CreateSetlist(newSetlistName);
+                selectedSetlistIndex = static_cast<int>(newIndex);
+                selectedSetlistItemIndex = -1;
+                newSetlistName[0] = '\0';
+            }
+
+            // Save / Load buttons
+            SectionTitle("Persistence");
+            {
+                static bool showSaveStatus = false;
+                static bool saveOk = false;
+                static float statusTimer = 0.0f;
+
+                float halfWidth = (ImGui::GetContentRegionAvail().x
+                    - ImGui::GetStyle().ItemSpacing.x) * 0.5f;
+
+                ImGui::BeginDisabled(setlistManager.GetSetlistCount() == 0);
+                if (ImGui::Button("Save", ImVec2(halfWidth, 0)))
+                {
+                    saveOk = setlistManager.SaveToFile(
+                        SetlistManager::GetDefaultSavePath());
+                    showSaveStatus = true;
+                    statusTimer = 2.0f;
+                }
+                ImGui::EndDisabled();
+
                 ImGui::SameLine();
-                if (PrimaryButton("Create", ImVec2(-1, 0)) || enterPressed)
+
+                if (ImGui::Button("Load", ImVec2(-1, 0)))
                 {
-                    size_t newIndex = setlistManager.CreateSetlist(newSetlistName);
-                    selectedSetlistIndex = static_cast<int>(newIndex);
-                    selectedSetlistItemIndex = -1;
-                    newSetlistName[0] = '\0';
-                }
-
-                // Save / Load buttons
-                SectionTitle("Persistence");
-                {
-                    static bool showSaveStatus = false;
-                    static bool saveOk = false;
-                    static float statusTimer = 0.0f;
-
-                    float halfWidth = (ImGui::GetContentRegionAvail().x
-                        - ImGui::GetStyle().ItemSpacing.x) * 0.5f;
-
-                    ImGui::BeginDisabled(setlistManager.GetSetlistCount() == 0);
-                    if (ImGui::Button("Save", ImVec2(halfWidth, 0)))
+                    if (setlistManager.LoadFromFile(
+                            SetlistManager::GetDefaultSavePath()))
                     {
-                        saveOk = setlistManager.SaveToFile(
-                            SetlistManager::GetDefaultSavePath());
-                        showSaveStatus = true;
-                        statusTimer = 2.0f;
-                    }
-                    ImGui::EndDisabled();
-
-                    ImGui::SameLine();
-
-                    if (ImGui::Button("Load", ImVec2(-1, 0)))
-                    {
-                        if (setlistManager.LoadFromFile(
-                                SetlistManager::GetDefaultSavePath()))
-                        {
-                            selectedSetlistIndex = setlistManager.GetSetlistCount() > 0 ? 0 : -1;
-                            selectedSetlistItemIndex = -1;
-                            saveOk = true;
-                        }
-                        else
-                        {
-                            saveOk = false;
-                        }
-                        showSaveStatus = true;
-                        statusTimer = 2.0f;
-                    }
-
-                    if (showSaveStatus)
-                    {
-                        ImVec4 color = saveOk
-                            ? ImVec4(0.4f, 1.0f, 0.4f, 1.0f)
-                            : ImVec4(1.0f, 0.4f, 0.4f, 1.0f);
-                        const char *msg = saveOk ? "OK!" : "Failed";
-                        ImGui::SameLine();
-                        ImGui::TextColored(color, "%s", msg);
-                        statusTimer -= ImGui::GetIO().DeltaTime;
-                        if (statusTimer <= 0.0f)
-                            showSaveStatus = false;
-                    }
-                }
-
-                // --- Setlist list ---
-                SectionTitle("Setlists");
-                bool isActiveSetlist = setlistManager.IsActive() &&
-                    selectedSetlistIndex == setlistManager.GetActiveSetlistIndex();
-
-                float setlistListHeight = 120.0f;
-                ImGui::BeginChild("SetlistList", ImVec2(0, setlistListHeight), true);
-                const auto &setlists = setlistManager.GetSetlists();
-                for (size_t i = 0; i < setlists.size(); i++)
-                {
-                    const Setlist &sl = setlists[i];
-                    bool isSel = (static_cast<int>(i) == selectedSetlistIndex);
-                    bool isThisActive = setlistManager.IsActive() &&
-                        setlistManager.GetActiveSetlistIndex() == static_cast<int>(i);
-
-                    // Build display label with active indicator + unique ID
-                    std::string displayLabel;
-                    if (isThisActive)
-                        displayLabel = "[ACTIVE] ";
-                    displayLabel += sl.GetName();
-                    displayLabel += " (" + std::to_string(sl.GetItemCount()) + ")";
-                    displayLabel += "##setlist_" + std::to_string(i);
-
-                    if (ImGui::Selectable(displayLabel.c_str(), isSel))
-                    {
-                        selectedSetlistIndex = static_cast<int>(i);
+                        selectedSetlistIndex = setlistManager.GetSetlistCount() > 0 ? 0 : -1;
                         selectedSetlistItemIndex = -1;
+                        saveOk = true;
+                    }
+                    else
+                    {
+                        saveOk = false;
+                    }
+                    showSaveStatus = true;
+                    statusTimer = 2.0f;
+                }
+
+                if (showSaveStatus)
+                {
+                    ImVec4 color = saveOk
+                        ? ImVec4(0.4f, 1.0f, 0.4f, 1.0f)
+                        : ImVec4(1.0f, 0.4f, 0.4f, 1.0f);
+                    const char *msg = saveOk ? "OK!" : "Failed";
+                    ImGui::SameLine();
+                    ImGui::TextColored(color, "%s", msg);
+                    statusTimer -= ImGui::GetIO().DeltaTime;
+                    if (statusTimer <= 0.0f)
+                        showSaveStatus = false;
+                }
+            }
+
+            // --- Setlist list ---
+            SectionTitle("Setlists");
+            bool isActiveSetlist = setlistManager.IsActive() &&
+                selectedSetlistIndex == setlistManager.GetActiveSetlistIndex();
+
+            float setlistListHeight = 120.0f;
+            ImGui::BeginChild("SetlistList", ImVec2(0, setlistListHeight), true);
+            const auto &setlists = setlistManager.GetSetlists();
+            for (size_t i = 0; i < setlists.size(); i++)
+            {
+                const Setlist &sl = setlists[i];
+                bool isSel = (static_cast<int>(i) == selectedSetlistIndex);
+                bool isThisActive = setlistManager.IsActive() &&
+                    setlistManager.GetActiveSetlistIndex() == static_cast<int>(i);
+
+                // Build display label with active indicator + unique ID
+                std::string displayLabel;
+                if (isThisActive)
+                    displayLabel = "[ACTIVE] ";
+                displayLabel += sl.GetName();
+                displayLabel += " (" + std::to_string(sl.GetItemCount()) + ")";
+                displayLabel += "##setlist_" + std::to_string(i);
+
+                if (ImGui::Selectable(displayLabel.c_str(), isSel))
+                {
+                    selectedSetlistIndex = static_cast<int>(i);
+                    selectedSetlistItemIndex = -1;
+                }
+            }
+            ImGui::EndChild();
+
+            // --- Setlist action buttons ---
+            Setlist *selectedSetlist = nullptr;
+            if (selectedSetlistIndex >= 0 &&
+                selectedSetlistIndex < static_cast<int>(setlistManager.GetSetlistCount()))
+            {
+                selectedSetlist = setlistManager.GetSetlist(
+                    static_cast<size_t>(selectedSetlistIndex));
+            }
+
+            {
+                bool canActivate = selectedSetlist &&
+                                    selectedSetlist->GetItemCount() > 0;
+                float halfWidth = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) * 0.5f;
+
+                ImGui::BeginDisabled(!canActivate);
+                if (PrimaryButton(isActiveSetlist ? "Reactivate" : "Activate",
+                                    ImVec2(halfWidth, 0)))
+                {
+                    setlistManager.ActivateSetlist(
+                        static_cast<size_t>(selectedSetlistIndex), viewer);
+                }
+                ImGui::EndDisabled();
+
+                ImGui::SameLine();
+
+                ImGui::BeginDisabled(selectedSetlistIndex < 0);
+                if (ImGui::Button("Remove", ImVec2(-1, 0)))
+                {
+                    size_t removeIdx = static_cast<size_t>(selectedSetlistIndex);
+                    // Adjust selectedSetlistIndex before removal
+                    int newSelected = -1;
+                    if (static_cast<int>(setlistManager.GetSetlistCount()) > 1)
+                    {
+                        if (selectedSetlistIndex > 0)
+                            newSelected = selectedSetlistIndex - 1;
+                        else
+                            newSelected = 0;
+                    }
+                    setlistManager.RemoveSetlist(removeIdx);
+                    selectedSetlistIndex = newSelected;
+                    selectedSetlistItemIndex = -1;
+                    // Refresh pointer after removal
+                    selectedSetlist = nullptr;
+                    if (selectedSetlistIndex >= 0)
+                    {
+                        selectedSetlist = setlistManager.GetSetlist(
+                            static_cast<size_t>(selectedSetlistIndex));
+                    }
+                }
+                ImGui::EndDisabled();
+            }
+
+            SectionTitle("Setlist Items");
+
+            // --- Selected setlist contents ---
+            if (selectedSetlist)
+            {
+                ImGui::TextColored(ImVec4(0.7f, 0.9f, 1.0f, 1.0f),
+                    "%s  (%zu items)", selectedSetlist->GetName().c_str(),
+                    selectedSetlist->GetItemCount());
+
+                // Add file from dropdown
+                bool hasFiles = library.GetFileCount() > 0;
+                ImGui::BeginDisabled(!hasFiles);
+                {
+                    const auto &files = library.GetFiles();
+                    float addBtnWidth = 45.0f;
+                    ImGui::SetNextItemWidth(
+                        ImGui::GetContentRegionAvail().x - addBtnWidth
+                        - ImGui::GetStyle().ItemSpacing.x);
+
+                    static int comboFileIndex = 0;
+                    if (comboFileIndex >= static_cast<int>(files.size()))
+                        comboFileIndex = 0;
+
+                    const char *previewName = files.empty()
+                        ? "No files" : files[static_cast<size_t>(comboFileIndex)].filename.c_str();
+                    if (ImGui::BeginCombo("##AddFileCombo", previewName))
+                    {
+                        for (size_t i = 0; i < files.size(); i++)
+                        {
+                            bool selected = (static_cast<int>(i) == comboFileIndex);
+                            std::string comboLabel = files[i].filename
+                                + "##combo_" + std::to_string(i);
+                            if (ImGui::Selectable(comboLabel.c_str(), selected))
+                            {
+                                comboFileIndex = static_cast<int>(i);
+                            }
+                            if (selected)
+                                ImGui::SetItemDefaultFocus();
+                        }
+                        ImGui::EndCombo();
+                    }
+                    ImGui::SameLine();
+                    if (PrimaryButton("Add", ImVec2(-1, 0)))
+                    {
+                        if (comboFileIndex >= 0 &&
+                            comboFileIndex < static_cast<int>(files.size()))
+                        {
+                            selectedSetlist->AddItem(
+                                files[static_cast<size_t>(comboFileIndex)]);
+                        }
+                    }
+                }
+                ImGui::EndDisabled();
+
+                // Items list — use all remaining space minus button area
+                float buttonAreaHeight = ImGui::GetFrameHeightWithSpacing() * 3.0f + 4.0f;
+                float itemsHeight = ImGui::GetContentRegionAvail().y - buttonAreaHeight;
+                if (itemsHeight < 60.0f)
+                    itemsHeight = 60.0f;
+
+                ImGui::BeginChild("SetlistItems", ImVec2(0, itemsHeight), true);
+                const auto &items = selectedSetlist->GetItems();
+                for (size_t i = 0; i < items.size(); i++)
+                {
+                    const SetlistItem &item = items[i];
+                    bool isSel = (static_cast<int>(i) == selectedSetlistItemIndex);
+                    bool isThisPlaying = setlistManager.IsActive() &&
+                        setlistManager.GetActiveSetlistIndex() == selectedSetlistIndex &&
+                        setlistManager.GetActiveItemIndex() == static_cast<int>(i);
+
+                    // Color playing item
+                    if (isThisPlaying)
+                    {
+                        ImGui::PushStyleColor(ImGuiCol_Text,
+                            ImVec4(0.4f, 1.0f, 0.4f, 1.0f));
+                    }
+
+                    std::string displayName =
+                        std::to_string(i + 1) + ". " + item.name;
+                    if (isThisPlaying)
+                        displayName = "> " + displayName;
+
+                    std::string label =
+                        displayName + "##setlist_item_" + std::to_string(i);
+
+                    if (ImGui::Selectable(label.c_str(), isSel,
+                                            ImGuiSelectableFlags_AllowDoubleClick))
+                    {
+                        selectedSetlistItemIndex = static_cast<int>(i);
+                        if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+                        {
+                            setlistManager.JumpToItem(
+                                static_cast<size_t>(selectedSetlistIndex),
+                                i, viewer);
+                        }
+                    }
+
+                    if (isThisPlaying)
+                        ImGui::PopStyleColor();
+
+                    if (ImGui::IsItemHovered())
+                    {
+                        ImGui::SetTooltip("%s", item.fullPath.c_str());
                     }
                 }
                 ImGui::EndChild();
 
-                // --- Setlist action buttons ---
-                Setlist *selectedSetlist = nullptr;
-                if (selectedSetlistIndex >= 0 &&
-                    selectedSetlistIndex < static_cast<int>(setlistManager.GetSetlistCount()))
+                // --- Item action buttons (compact layout) ---
+                bool hasItemSelected = selectedSetlistItemIndex >= 0 &&
+                    selectedSetlistItemIndex < static_cast<int>(selectedSetlist->GetItemCount());
+                float thirdWidth = (ImGui::GetContentRegionAvail().x
+                    - ImGui::GetStyle().ItemSpacing.x * 2.0f) / 3.0f;
+
+                // Row 1: Open | Move Up | Move Down
+                ImGui::BeginDisabled(!hasItemSelected);
+                if (PrimaryButton("Open", ImVec2(thirdWidth, 0)))
                 {
-                    selectedSetlist = setlistManager.GetSetlist(
-                        static_cast<size_t>(selectedSetlistIndex));
+                    setlistManager.JumpToItem(
+                        static_cast<size_t>(selectedSetlistIndex),
+                        static_cast<size_t>(selectedSetlistItemIndex),
+                        viewer);
                 }
-
+                ImGui::SameLine();
                 {
-                    bool canActivate = selectedSetlist &&
-                                       selectedSetlist->GetItemCount() > 0;
-                    float halfWidth = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) * 0.5f;
-
-                    ImGui::BeginDisabled(!canActivate);
-                    if (PrimaryButton(isActiveSetlist ? "Reactivate" : "Activate",
-                                      ImVec2(halfWidth, 0)))
+                    bool canMoveUp = hasItemSelected && selectedSetlistItemIndex > 0;
+                    ImGui::BeginDisabled(!canMoveUp);
+                    if (ImGui::Button("Up", ImVec2(thirdWidth, 0)))
                     {
-                        setlistManager.ActivateSetlist(
-                            static_cast<size_t>(selectedSetlistIndex), viewer);
-                    }
-                    ImGui::EndDisabled();
-
-                    ImGui::SameLine();
-
-                    ImGui::BeginDisabled(selectedSetlistIndex < 0);
-                    if (ImGui::Button("Remove", ImVec2(-1, 0)))
-                    {
-                        size_t removeIdx = static_cast<size_t>(selectedSetlistIndex);
-                        // Adjust selectedSetlistIndex before removal
-                        int newSelected = -1;
-                        if (static_cast<int>(setlistManager.GetSetlistCount()) > 1)
-                        {
-                            if (selectedSetlistIndex > 0)
-                                newSelected = selectedSetlistIndex - 1;
-                            else
-                                newSelected = 0;
-                        }
-                        setlistManager.RemoveSetlist(removeIdx);
-                        selectedSetlistIndex = newSelected;
-                        selectedSetlistItemIndex = -1;
-                        // Refresh pointer after removal
-                        selectedSetlist = nullptr;
-                        if (selectedSetlistIndex >= 0)
-                        {
-                            selectedSetlist = setlistManager.GetSetlist(
-                                static_cast<size_t>(selectedSetlistIndex));
-                        }
-                    }
-                    ImGui::EndDisabled();
-                }
-
-                SectionTitle("Setlist Items");
-
-                // --- Selected setlist contents ---
-                if (selectedSetlist)
-                {
-                    ImGui::TextColored(ImVec4(0.7f, 0.9f, 1.0f, 1.0f),
-                        "%s  (%zu items)", selectedSetlist->GetName().c_str(),
-                        selectedSetlist->GetItemCount());
-
-                    // Add file from dropdown
-                    bool hasFiles = library.GetFileCount() > 0;
-                    ImGui::BeginDisabled(!hasFiles);
-                    {
-                        const auto &files = library.GetFiles();
-                        float addBtnWidth = 45.0f;
-                        ImGui::SetNextItemWidth(
-                            ImGui::GetContentRegionAvail().x - addBtnWidth
-                            - ImGui::GetStyle().ItemSpacing.x);
-
-                        static int comboFileIndex = 0;
-                        if (comboFileIndex >= static_cast<int>(files.size()))
-                            comboFileIndex = 0;
-
-                        const char *previewName = files.empty()
-                            ? "No files" : files[static_cast<size_t>(comboFileIndex)].filename.c_str();
-                        if (ImGui::BeginCombo("##AddFileCombo", previewName))
-                        {
-                            for (size_t i = 0; i < files.size(); i++)
-                            {
-                                bool selected = (static_cast<int>(i) == comboFileIndex);
-                                std::string comboLabel = files[i].filename
-                                    + "##combo_" + std::to_string(i);
-                                if (ImGui::Selectable(comboLabel.c_str(), selected))
-                                {
-                                    comboFileIndex = static_cast<int>(i);
-                                }
-                                if (selected)
-                                    ImGui::SetItemDefaultFocus();
-                            }
-                            ImGui::EndCombo();
-                        }
-                        ImGui::SameLine();
-                        if (PrimaryButton("Add", ImVec2(-1, 0)))
-                        {
-                            if (comboFileIndex >= 0 &&
-                                comboFileIndex < static_cast<int>(files.size()))
-                            {
-                                selectedSetlist->AddItem(
-                                    files[static_cast<size_t>(comboFileIndex)]);
-                            }
-                        }
-                    }
-                    ImGui::EndDisabled();
-
-                    // Items list — use all remaining space minus button area
-                    float buttonAreaHeight = ImGui::GetFrameHeightWithSpacing() * 3.0f + 4.0f;
-                    float itemsHeight = ImGui::GetContentRegionAvail().y - buttonAreaHeight;
-                    if (itemsHeight < 60.0f)
-                        itemsHeight = 60.0f;
-
-                    ImGui::BeginChild("SetlistItems", ImVec2(0, itemsHeight), true);
-                    const auto &items = selectedSetlist->GetItems();
-                    for (size_t i = 0; i < items.size(); i++)
-                    {
-                        const SetlistItem &item = items[i];
-                        bool isSel = (static_cast<int>(i) == selectedSetlistItemIndex);
-                        bool isThisPlaying = setlistManager.IsActive() &&
-                            setlistManager.GetActiveSetlistIndex() == selectedSetlistIndex &&
-                            setlistManager.GetActiveItemIndex() == static_cast<int>(i);
-
-                        // Color playing item
-                        if (isThisPlaying)
-                        {
-                            ImGui::PushStyleColor(ImGuiCol_Text,
-                                ImVec4(0.4f, 1.0f, 0.4f, 1.0f));
-                        }
-
-                        std::string displayName =
-                            std::to_string(i + 1) + ". " + item.name;
-                        if (isThisPlaying)
-                            displayName = "> " + displayName;
-
-                        std::string label =
-                            displayName + "##setlist_item_" + std::to_string(i);
-
-                        if (ImGui::Selectable(label.c_str(), isSel,
-                                              ImGuiSelectableFlags_AllowDoubleClick))
-                        {
-                            selectedSetlistItemIndex = static_cast<int>(i);
-                            if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
-                            {
-                                setlistManager.JumpToItem(
-                                    static_cast<size_t>(selectedSetlistIndex),
-                                    i, viewer);
-                            }
-                        }
-
-                        if (isThisPlaying)
-                            ImGui::PopStyleColor();
-
-                        if (ImGui::IsItemHovered())
-                        {
-                            ImGui::SetTooltip("%s", item.fullPath.c_str());
-                        }
-                    }
-                    ImGui::EndChild();
-
-                    // --- Item action buttons (compact layout) ---
-                    bool hasItemSelected = selectedSetlistItemIndex >= 0 &&
-                        selectedSetlistItemIndex < static_cast<int>(selectedSetlist->GetItemCount());
-                    float thirdWidth = (ImGui::GetContentRegionAvail().x
-                        - ImGui::GetStyle().ItemSpacing.x * 2.0f) / 3.0f;
-
-                    // Row 1: Open | Move Up | Move Down
-                    ImGui::BeginDisabled(!hasItemSelected);
-                    if (PrimaryButton("Open", ImVec2(thirdWidth, 0)))
-                    {
-                        setlistManager.JumpToItem(
-                            static_cast<size_t>(selectedSetlistIndex),
+                        selectedSetlist->MoveItem(
                             static_cast<size_t>(selectedSetlistItemIndex),
-                            viewer);
-                    }
-                    ImGui::SameLine();
-                    {
-                        bool canMoveUp = hasItemSelected && selectedSetlistItemIndex > 0;
-                        ImGui::BeginDisabled(!canMoveUp);
-                        if (ImGui::Button("Up", ImVec2(thirdWidth, 0)))
-                        {
-                            selectedSetlist->MoveItem(
-                                static_cast<size_t>(selectedSetlistItemIndex),
-                                static_cast<size_t>(selectedSetlistItemIndex - 1));
-                            selectedSetlistItemIndex--;
-                        }
-                        ImGui::EndDisabled();
-                    }
-                    ImGui::SameLine();
-                    {
-                        bool canMoveDown = hasItemSelected &&
-                            selectedSetlistItemIndex + 1 < static_cast<int>(selectedSetlist->GetItemCount());
-                        ImGui::BeginDisabled(!canMoveDown);
-                        if (ImGui::Button("Down", ImVec2(-1, 0)))
-                        {
-                            selectedSetlist->MoveItem(
-                                static_cast<size_t>(selectedSetlistItemIndex),
-                                static_cast<size_t>(selectedSetlistItemIndex + 1));
-                            selectedSetlistItemIndex++;
-                        }
-                        ImGui::EndDisabled();
-                    }
-
-                    // Row 2: Remove Item | Clear All
-                    float halfWidth = (ImGui::GetContentRegionAvail().x
-                        - ImGui::GetStyle().ItemSpacing.x) * 0.5f;
-                    if (ImGui::Button("Remove Item", ImVec2(halfWidth, 0)))
-                    {
-                        selectedSetlist->RemoveItem(
-                            static_cast<size_t>(selectedSetlistItemIndex));
-                        if (selectedSetlistItemIndex >= static_cast<int>(selectedSetlist->GetItemCount()))
-                            selectedSetlistItemIndex = static_cast<int>(selectedSetlist->GetItemCount()) - 1;
-                    }
-                    ImGui::EndDisabled();
-
-                    ImGui::SameLine();
-
-                    ImGui::BeginDisabled(selectedSetlist->GetItemCount() == 0);
-                    if (ImGui::Button("Clear All", ImVec2(-1, 0)))
-                    {
-                        selectedSetlist->Clear();
-                        selectedSetlistItemIndex = -1;
+                            static_cast<size_t>(selectedSetlistItemIndex - 1));
+                        selectedSetlistItemIndex--;
                     }
                     ImGui::EndDisabled();
                 }
-                else
+                ImGui::SameLine();
                 {
-                    ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f),
-                                       "Create or select a setlist above.");
+                    bool canMoveDown = hasItemSelected &&
+                        selectedSetlistItemIndex + 1 < static_cast<int>(selectedSetlist->GetItemCount());
+                    ImGui::BeginDisabled(!canMoveDown);
+                    if (ImGui::Button("Down", ImVec2(-1, 0)))
+                    {
+                        selectedSetlist->MoveItem(
+                            static_cast<size_t>(selectedSetlistItemIndex),
+                            static_cast<size_t>(selectedSetlistItemIndex + 1));
+                        selectedSetlistItemIndex++;
+                    }
+                    ImGui::EndDisabled();
                 }
 
-                ImGui::EndTabItem();
+                // Row 2: Remove Item | Clear All
+                float halfWidth = (ImGui::GetContentRegionAvail().x
+                    - ImGui::GetStyle().ItemSpacing.x) * 0.5f;
+                if (ImGui::Button("Remove Item", ImVec2(halfWidth, 0)))
+                {
+                    selectedSetlist->RemoveItem(
+                        static_cast<size_t>(selectedSetlistItemIndex));
+                    if (selectedSetlistItemIndex >= static_cast<int>(selectedSetlist->GetItemCount()))
+                        selectedSetlistItemIndex = static_cast<int>(selectedSetlist->GetItemCount()) - 1;
+                }
+                ImGui::EndDisabled();
+
+                ImGui::SameLine();
+
+                ImGui::BeginDisabled(selectedSetlist->GetItemCount() == 0);
+                if (ImGui::Button("Clear All", ImVec2(-1, 0)))
+                {
+                    selectedSetlist->Clear();
+                    selectedSetlistItemIndex = -1;
+                }
+                ImGui::EndDisabled();
+            }
+            else
+            {
+                ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f),
+                                    "Create or select a setlist above.");
             }
 
-            ImGui::EndTabBar();
+            ImGui::EndTabItem();
         }
-    }
-    else
-    {
-        ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "Select a folder to browse PDFs");
+
+        ImGui::EndTabBar();
     }
 
     ImGui::End();
