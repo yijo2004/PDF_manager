@@ -28,10 +28,10 @@ Ensure your `vendor/` folder is set up correctly:
     cmake --build .
     ```
 
-3.  **Setup Runtime (Crucial)**
-    Copy the PDFium DLL (pdfium.dll) and font TTL file (font.ttf) to your executable folder
-
-4.  **Run**
+3.  **Run**
     ```powershell
     .\Debug\PdfApp.exe
     ```
+
+CMake automatically copies `pdfium.dll` and `font.ttf` beside `PdfApp.exe`
+after each build.

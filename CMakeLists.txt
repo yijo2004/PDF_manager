@@ -75,5 +75,17 @@ target_include_directories(PdfApp PRIVATE ${CMAKE_SOURCE_DIR}/src)
 # "ole32" and "shell32" are needed for the folder picker (IFileDialog)
 target_link_libraries(PdfApp PRIVATE imgui ${PDFIUM_LIB} glfw3 opengl32 comdlg32 ole32 shell32)
 if(MSVC)
-    set_target_properties(PdfApp PROPERTIES LINK_FLAGS "/ENTRY:mainCRTStartup")
+    set_target_properties(PdfApp PROPERTIES
+        LINK_FLAGS "/ENTRY:mainCRTStartup"
+        VS_DEBUGGER_WORKING_DIRECTORY "$<TARGET_FILE_DIR:PdfApp>"
+    )
 endif()
+
+add_custom_command(TARGET PdfApp POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_SOURCE_DIR}/font.ttf"
+        "$<TARGET_FILE_DIR:PdfApp>/font.ttf"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_SOURCE_DIR}/pdfium.dll"
+        "$<TARGET_FILE_DIR:PdfApp>/pdfium.dll"
+)
