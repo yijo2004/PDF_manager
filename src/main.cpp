@@ -35,6 +35,9 @@ int main(int, char **)
     int selectedSetlistIndex = -1;
     int selectedSetlistItemIndex = -1;
     SetlistManager setlistManager;
+    AppUiState uiState;
+    LoadUiSettings(uiState);
+    ApplyUiDensity(uiState);
 
     // Auto-load saved setlists
     {
@@ -59,20 +62,26 @@ int main(int, char **)
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
+        ImGuiIO &io = ImGui::GetIO();
+        ApplyUiDensity(uiState);
+        RenderMainMenuBar(library, viewer, setlistManager, uiState,
+                          selectedFileIndex, selectedSetlistIndex,
+                          selectedSetlistItemIndex);
+
         // Create dockable workspace
         ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport());
 
         // Render UI panels
-        ImGuiIO &io = ImGui::GetIO();
         ImGuiViewport *viewport = ImGui::GetMainViewport();
-        RenderControlsPanel(viewer, setlistManager, io, viewport);
         RenderLibraryPanel(library, viewer, setlistManager,
+                           uiState,
                            selectedFileIndex, selectedSetlistIndex,
                            selectedSetlistItemIndex, viewport);
-        bool notesVisible = setlistManager.IsActive();
-        RenderNotesPanel(setlistManager, viewport);
-        RenderViewerPanel(viewer, setlistManager, viewport);
-        RenderSplitters(io, viewport, notesVisible);
+        RenderDocumentToolbar(viewer, setlistManager, uiState, io, viewport);
+        RenderNotesPanel(setlistManager, uiState, viewport);
+        RenderViewerPanel(viewer, setlistManager, uiState, viewport);
+        RenderSplitters(uiState, io, viewport,
+                        setlistManager.IsActive() && uiState.notesVisible);
 
         // Render frame
         ImGui::Render();
@@ -96,12 +105,13 @@ int main(int, char **)
     }
 
     // Auto-save setlists on exit
-    if (setlistManager.GetSetlistCount() > 0)
+    if (uiState.autoSaveSetlists && setlistManager.GetSetlistCount() > 0)
     {
         std::string savePath = SetlistManager::GetDefaultSavePath();
         if (setlistManager.SaveToFile(savePath))
             printf("[App] Saved setlists to %s\n", savePath.c_str());
     }
+    SaveUiSettings(uiState);
 
     // Cleanup
     viewer.Close();
