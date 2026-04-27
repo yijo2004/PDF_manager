@@ -55,6 +55,7 @@ bool PdfViewer::Load(const std::string &filepath)
     m_filename = (lastSlash != std::string::npos)
                      ? filepath.substr(lastSlash + 1)
                      : filepath;
+    m_filePath = filepath;
 
     // Render the first page
     m_needsRender = true;
@@ -84,6 +85,7 @@ void PdfViewer::Close()
     m_zoomLevel = 1.0f;
     m_needsRender = false;
     m_filename.clear();
+    m_filePath.clear();
     m_pageNativeWidth = 0.0;
     m_pageNativeHeight = 0.0;
 }

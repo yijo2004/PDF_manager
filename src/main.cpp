@@ -4,6 +4,11 @@
  * A simple PDF viewer built with ImGui, GLFW, OpenGL, and PDFium.
  */
 
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#endif
+
 #include <GLFW/glfw3.h>
 #include <fpdfview.h>
 
@@ -11,6 +16,10 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <ctime>
+#include <filesystem>
+#include <string>
+#include <vector>
 
 #include "file_dialog.h"
 #include "imgui.h"
@@ -132,6 +141,9 @@ static bool g_draggingVertical = false;
 static bool g_draggingRightSplitter = false;
 static const float SPLITTER_THICKNESS = 6.0f;
 
+// Path of the current transposed temp file (empty when none)
+static std::string g_tempTransposedPath;
+
 static void ApplyCustomTheme()
 {
     ImGuiStyle &style = ImGui::GetStyle();
@@ -187,6 +199,165 @@ static void SectionTitle(const char *title)
     ImGui::TextUnformatted(title);
     ImGui::PopStyleColor();
     ImGui::Separator();
+}
+
+// =============================================================================
+// Transpose Helpers
+// =============================================================================
+
+static std::string MakeTempPdfPath()
+{
+    std::filesystem::path tmpDir = std::filesystem::temp_directory_path();
+    std::string name = "pdfmgr_transposed_" + std::to_string(std::time(nullptr)) + ".pdf";
+    return (tmpDir / name).string();
+}
+
+// Launches "python transpose.py input output [fromKey] toKey" without a
+// visible console window. Returns the process exit code (0 = success).
+static int RunTransposeScript(const std::string &inputPath,
+                              const std::string &outputPath,
+                              const std::string &fromKey,
+                              const std::string &toKey,
+                              std::string &errorMsg)
+{
+#ifdef _WIN32
+    // Locate transpose.exe next to the running executable
+    wchar_t exePathW[MAX_PATH] = {};
+    GetModuleFileNameW(nullptr, exePathW, MAX_PATH);
+    std::filesystem::path transposeExe =
+        std::filesystem::path(exePathW).parent_path() / "transpose.exe";
+
+    if (!std::filesystem::exists(transposeExe))
+    {
+        errorMsg = "transpose.exe not found next to the executable. "
+                   "Rebuild the project to generate it.";
+        return -1;
+    }
+
+    std::string cmd = "\"" + transposeExe.string() + "\""
+                      + " \"" + inputPath + "\""
+                      + " \"" + outputPath + "\"";
+    if (!fromKey.empty())
+        cmd += " " + fromKey;
+    cmd += " " + toKey;
+
+    // CreateProcess requires a mutable char buffer
+    std::vector<char> cmdBuf(cmd.begin(), cmd.end());
+    cmdBuf.push_back('\0');
+
+    STARTUPINFOA si = {};
+    si.cb = sizeof(si);
+    PROCESS_INFORMATION pi = {};
+
+    BOOL created = CreateProcessA(
+        nullptr, cmdBuf.data(),
+        nullptr, nullptr, FALSE,
+        CREATE_NO_WINDOW,
+        nullptr, nullptr,
+        &si, &pi);
+
+    if (!created)
+    {
+        errorMsg = "Failed to launch transpose.exe.";
+        return -1;
+    }
+
+    WaitForSingleObject(pi.hProcess, INFINITE);
+
+    DWORD exitCode = 0;
+    GetExitCodeProcess(pi.hProcess, &exitCode);
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+
+    if (exitCode != 0)
+    {
+        errorMsg = "Transpose failed (exit code " + std::to_string(exitCode) + ").";
+    }
+    return static_cast<int>(exitCode);
+#else
+    (void)inputPath; (void)outputPath; (void)fromKey; (void)toKey;
+    errorMsg = "Transposition is only supported on Windows in this build.";
+    return -1;
+#endif
+}
+
+static void RenderTransposeModal(PdfViewer &viewer)
+{
+    ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(360, 0), ImGuiCond_Appearing);
+
+    if (ImGui::BeginPopupModal("Transpose PDF", nullptr,
+                               ImGuiWindowFlags_AlwaysAutoResize))
+    {
+        static char fromKeyBuf[16] = "";
+        static char toKeyBuf[16] = "";
+        static std::string s_errorMsg;
+
+        ImGui::TextWrapped("Transpose chords in the current PDF to a new key.");
+        ImGui::Spacing();
+
+        ImGui::Text("Current Key");
+        ImGui::SetNextItemWidth(-1);
+        ImGui::InputText("##FromKey", fromKeyBuf, sizeof(fromKeyBuf));
+        ImGui::TextDisabled("Leave blank to auto-detect from PDF text");
+        ImGui::Spacing();
+
+        ImGui::Text("Target Key");
+        ImGui::SetNextItemWidth(-1);
+        ImGui::InputText("##ToKey", toKeyBuf, sizeof(toKeyBuf));
+        ImGui::TextDisabled("e.g.  C   G   Bb   F#");
+        ImGui::Spacing();
+
+        if (!s_errorMsg.empty())
+        {
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.4f, 0.4f, 1.0f));
+            ImGui::TextWrapped("%s", s_errorMsg.c_str());
+            ImGui::PopStyleColor();
+            ImGui::Spacing();
+        }
+
+        bool canTranspose = toKeyBuf[0] != '\0';
+        ImGui::BeginDisabled(!canTranspose);
+        if (PrimaryButton("Transpose", ImVec2(120, 0)))
+        {
+            s_errorMsg.clear();
+            std::string newTmp = MakeTempPdfPath();
+
+            int rc = RunTransposeScript(
+                viewer.GetFilePath(), newTmp,
+                std::string(fromKeyBuf), std::string(toKeyBuf),
+                s_errorMsg);
+
+            if (rc == 0)
+            {
+                // Remove previous temp file before loading the new one
+                if (!g_tempTransposedPath.empty())
+                {
+                    std::error_code ec;
+                    std::filesystem::remove(g_tempTransposedPath, ec);
+                }
+                g_tempTransposedPath = newTmp;
+                viewer.Load(newTmp);
+                fromKeyBuf[0] = '\0';
+                toKeyBuf[0] = '\0';
+                ImGui::EndDisabled();
+                ImGui::CloseCurrentPopup();
+                ImGui::EndPopup();
+                return;
+            }
+        }
+        ImGui::EndDisabled();
+
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel", ImVec2(120, 0)))
+        {
+            s_errorMsg.clear();
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::EndPopup();
+    }
 }
 
 // =============================================================================
@@ -280,6 +451,12 @@ static void RenderLibraryPanel(PdfLibrary &library,
                             if (viewer.GetFilename() != entry.filename)
                             {
                                 setlistManager.Deactivate();
+                                if (!g_tempTransposedPath.empty())
+                                {
+                                    std::error_code ec;
+                                    std::filesystem::remove(g_tempTransposedPath, ec);
+                                    g_tempTransposedPath.clear();
+                                }
                                 viewer.Load(entry.fullPath);
                             }
                         }
@@ -754,6 +931,11 @@ static void RenderControlsPanel(PdfViewer &viewer,
         SectionTitle("Actions");
         if (ImGui::Button("Close PDF", ImVec2(-1, 0)))
             viewer.Close();
+
+        if (ImGui::Button("Transpose PDF...", ImVec2(-1, 0)))
+            ImGui::OpenPopup("Transpose PDF");
+
+        RenderTransposeModal(viewer);
     }
     else
     {
@@ -1153,6 +1335,14 @@ int main(int, char **)
         std::string savePath = SetlistManager::GetDefaultSavePath();
         if (setlistManager.SaveToFile(savePath))
             printf("[App] Saved setlists to %s\n", savePath.c_str());
+    }
+
+    // Remove any transposed temp file
+    if (!g_tempTransposedPath.empty())
+    {
+        std::error_code ec;
+        std::filesystem::remove(g_tempTransposedPath, ec);
+        g_tempTransposedPath.clear();
     }
 
     // Cleanup

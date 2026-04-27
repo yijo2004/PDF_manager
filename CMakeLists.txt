@@ -77,3 +77,37 @@ target_link_libraries(PdfApp PRIVATE imgui ${PDFIUM_LIB} glfw3 opengl32 comdlg32
 if(MSVC)
     set_target_properties(PdfApp PROPERTIES LINK_FLAGS "/ENTRY:mainCRTStartup")
 endif()
+
+# -----------------------------------------------------------------------------
+# 4. Package transpose.py into a standalone transpose.exe via PyInstaller
+# -----------------------------------------------------------------------------
+find_program(PYTHON_EXE NAMES python python3 REQUIRED)
+
+set(TRANSPOSE_EXE_STAGED "${CMAKE_BINARY_DIR}/transpose_dist/transpose.exe")
+
+# Only re-runs when transpose.py or requirements.txt change
+add_custom_command(
+    OUTPUT  "${TRANSPOSE_EXE_STAGED}"
+    COMMAND "${PYTHON_EXE}" -m pip install -r "${CMAKE_SOURCE_DIR}/requirements.txt" --quiet
+    COMMAND "${PYTHON_EXE}" -m PyInstaller
+            --onefile
+            --distpath "${CMAKE_BINARY_DIR}/transpose_dist"
+            --workpath "${CMAKE_BINARY_DIR}/transpose_work"
+            --specpath "${CMAKE_BINARY_DIR}"
+            "${CMAKE_SOURCE_DIR}/src/transpose.py"
+    DEPENDS "${CMAKE_SOURCE_DIR}/src/transpose.py"
+            "${CMAKE_SOURCE_DIR}/requirements.txt"
+    COMMENT "Packaging transpose.py into transpose.exe (first run takes ~30-60s)"
+    VERBATIM
+)
+
+add_custom_target(transpose_exe ALL DEPENDS "${TRANSPOSE_EXE_STAGED}")
+add_dependencies(PdfApp transpose_exe)
+
+# Copy the bundled exe next to PdfApp.exe after each successful link
+add_custom_command(TARGET PdfApp POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${TRANSPOSE_EXE_STAGED}"
+        "$<TARGET_FILE_DIR:PdfApp>/transpose.exe"
+    COMMENT "Copying transpose.exe to output directory"
+)
