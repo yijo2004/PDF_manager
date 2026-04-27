@@ -15,6 +15,7 @@
 
 #include <cstdio>
 #include <filesystem>
+#include <vector>
 #include <string>
 
 #include "imgui.h"
@@ -26,6 +27,16 @@ static void GlfwErrorCallback(int error, const char *description)
 {
     fprintf(stderr, "GLFW Error %d: %s\n", error, description);
 }
+
+struct AppFontBucket
+{
+    int sizePx = 0;
+    ImFont *font = nullptr;
+};
+
+static const int APP_FONT_SIZES[] = {18, 20, 22, 24, 26, 30};
+static std::vector<AppFontBucket> g_appFonts;
+static ImFont *g_fallbackFont = nullptr;
 
 static std::string RuntimeAssetPath(const char *filename)
 {
@@ -92,14 +103,36 @@ void InitImGui(GLFWwindow *window, const char *glslVersion)
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
     io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
 
-    // Load custom font with Korean support from the executable directory.
+    // Load custom font sizes with Korean support from the executable directory.
     const std::string fontPath = RuntimeAssetPath("font.ttf");
-    ImFont *font = io.Fonts->AddFontFromFileTTF(
-        fontPath.c_str(), 22.0f, nullptr, io.Fonts->GetGlyphRangesKorean());
-    if (!font)
+    const ImWchar *koreanRanges = io.Fonts->GetGlyphRangesKorean();
+    g_appFonts.clear();
+    g_appFonts.reserve(sizeof(APP_FONT_SIZES) / sizeof(APP_FONT_SIZES[0]));
+    for (int sizePx : APP_FONT_SIZES)
+    {
+        ImFont *font = io.Fonts->AddFontFromFileTTF(
+            fontPath.c_str(), static_cast<float>(sizePx), nullptr,
+            koreanRanges);
+        if (font)
+            g_appFonts.push_back({sizePx, font});
+    }
+
+    if (g_appFonts.empty())
     {
         printf("Failed to load font, using default.\n");
-        io.Fonts->AddFontDefault();
+        g_fallbackFont = io.Fonts->AddFontDefault();
+    }
+    else
+    {
+        g_fallbackFont = g_appFonts.front().font;
+        for (const AppFontBucket &bucket : g_appFonts)
+        {
+            if (bucket.sizePx == 22)
+            {
+                g_fallbackFont = bucket.font;
+                break;
+            }
+        }
     }
 
     ApplyCustomTheme();
@@ -114,6 +147,49 @@ void InitImGui(GLFWwindow *window, const char *glslVersion)
 
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init(glslVersion);
+}
+
+int ChooseAutoAppFontSizePx(GLFWwindow *window)
+{
+    int displayW = 0;
+    int displayH = 0;
+    if (window)
+        glfwGetFramebufferSize(window, &displayW, &displayH);
+
+    if (displayH <= 0)
+    {
+        GLFWmonitor *monitor = glfwGetPrimaryMonitor();
+        const GLFWvidmode *mode = monitor ? glfwGetVideoMode(monitor) : nullptr;
+        if (mode)
+            displayH = mode->height;
+    }
+
+    if (displayH < 900)
+        return 20;
+    if (displayH < 1440)
+        return 22;
+    if (displayH < 2160)
+        return 24;
+    return 30;
+}
+
+static ImFont *FindAppFont(int sizePx)
+{
+    for (const AppFontBucket &bucket : g_appFonts)
+    {
+        if (bucket.sizePx == sizePx)
+            return bucket.font;
+    }
+    return g_fallbackFont;
+}
+
+void ApplyAppFont(GLFWwindow *window, bool manualMode, int fontSizePx)
+{
+    ImGuiIO &io = ImGui::GetIO();
+    int activeSize = manualMode ? fontSizePx : ChooseAutoAppFontSizePx(window);
+    ImFont *font = FindAppFont(activeSize);
+    if (font)
+        io.FontDefault = font;
 }
 
 void Shutdown(GLFWwindow *window)

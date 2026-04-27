@@ -37,7 +37,8 @@ int main(int, char **)
     SetlistManager setlistManager;
     AppUiState uiState;
     LoadUiSettings(uiState);
-    ApplyUiDensity(uiState);
+    uiState.activeFontMode = uiState.fontMode;
+    uiState.activeFontSizePx = uiState.fontSizePx;
 
     // Auto-load saved setlists
     {
@@ -60,10 +61,11 @@ int main(int, char **)
         // Begin ImGui frame
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
+        ApplyAppFont(window, uiState.activeFontMode == AppFontMode::Manual,
+                     uiState.activeFontSizePx);
         ImGui::NewFrame();
 
         ImGuiIO &io = ImGui::GetIO();
-        ApplyUiDensity(uiState);
         RenderMainMenuBar(library, viewer, setlistManager, uiState,
                           selectedFileIndex, selectedSetlistIndex,
                           selectedSetlistItemIndex);
@@ -82,6 +84,8 @@ int main(int, char **)
         RenderViewerPanel(viewer, setlistManager, uiState, viewport);
         RenderSplitters(uiState, io, viewport,
                         setlistManager.IsActive() && uiState.notesVisible);
+        if (uiState.exitRequested)
+            glfwSetWindowShouldClose(window, GLFW_TRUE);
 
         // Render frame
         ImGui::Render();

@@ -36,6 +36,7 @@ static const float MIN_NOTES_RATIO = 0.14f;
 static const float MAX_NOTES_RATIO = 0.36f;
 static const float SPLITTER_THICKNESS = 6.0f;
 static const float TOOLBAR_HEIGHT = 50.0f;
+static const int FONT_SIZE_OPTIONS[] = {18, 20, 22, 24, 26, 30};
 
 static bool g_draggingSidebar = false;
 static bool g_draggingNotes = false;
@@ -139,6 +140,62 @@ static float NotesWidth(const ImGuiViewport *viewport,
                : 0.0f;
 }
 
+static bool IsFontSizeOption(int sizePx)
+{
+    for (int option : FONT_SIZE_OPTIONS)
+    {
+        if (option == sizePx)
+            return true;
+    }
+    return false;
+}
+
+static int ParseFontSize(const std::string &value, int fallback)
+{
+    try
+    {
+        int parsed = std::stoi(value);
+        return IsFontSizeOption(parsed) ? parsed : fallback;
+    }
+    catch (...)
+    {
+        return fallback;
+    }
+}
+
+static bool FontSettingChanged(const AppUiState &uiState)
+{
+    return uiState.fontMode != uiState.activeFontMode ||
+           uiState.fontSizePx != uiState.activeFontSizePx;
+}
+
+static void RenderFontRestartPopup(AppUiState &uiState)
+{
+    if (uiState.fontRestartPromptOpen)
+    {
+        ImGui::OpenPopup("Restart Required");
+        uiState.fontRestartPromptOpen = false;
+    }
+
+    if (ImGui::BeginPopupModal("Restart Required", nullptr,
+                               ImGuiWindowFlags_AlwaysAutoResize))
+    {
+        ImGui::TextUnformatted(
+            "Font size changes will apply after restarting the app.");
+        ImGui::Spacing();
+        if (PrimaryButton("Close App", ImVec2(120.0f, 0.0f)))
+        {
+            uiState.exitRequested = true;
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Later", ImVec2(100.0f, 0.0f)))
+            ImGui::CloseCurrentPopup();
+
+        ImGui::EndPopup();
+    }
+}
+
 static void RenderSettingsPopup(AppUiState &uiState)
 {
     if (uiState.settingsOpen)
@@ -156,17 +213,43 @@ static void RenderSettingsPopup(AppUiState &uiState)
                         &uiState.autoSaveSetlists);
 
         ImGui::Separator();
-        bool compact = uiState.compactDensity;
-        if (ImGui::RadioButton("Comfortable density", !compact))
-            uiState.compactDensity = false;
-        if (ImGui::RadioButton("Compact density", compact))
-            uiState.compactDensity = true;
+        std::string fontPreview =
+            uiState.fontMode == AppFontMode::Auto
+                ? "Auto"
+                : std::to_string(uiState.fontSizePx) + " px";
+        if (ImGui::BeginCombo("Font size", fontPreview.c_str()))
+        {
+            bool autoSelected = uiState.fontMode == AppFontMode::Auto;
+            if (ImGui::Selectable("Auto", autoSelected))
+                uiState.fontMode = AppFontMode::Auto;
+            if (autoSelected)
+                ImGui::SetItemDefaultFocus();
+
+            for (int sizePx : FONT_SIZE_OPTIONS)
+            {
+                std::string label = std::to_string(sizePx) + " px";
+                bool selected = uiState.fontMode == AppFontMode::Manual &&
+                                uiState.fontSizePx == sizePx;
+                if (ImGui::Selectable(label.c_str(), selected))
+                {
+                    uiState.fontMode = AppFontMode::Manual;
+                    uiState.fontSizePx = sizePx;
+                }
+                if (selected)
+                    ImGui::SetItemDefaultFocus();
+            }
+
+            ImGui::EndCombo();
+        }
 
         ImGui::Separator();
         if (PrimaryButton("Save Settings", ImVec2(150.0f, 0.0f)))
         {
+            bool fontChanged = FontSettingChanged(uiState);
             SaveUiSettings(uiState);
             ImGui::CloseCurrentPopup();
+            if (fontChanged)
+                uiState.fontRestartPromptOpen = true;
         }
         ImGui::SameLine();
         if (ImGui::Button("Close", ImVec2(100.0f, 0.0f)))
@@ -174,6 +257,8 @@ static void RenderSettingsPopup(AppUiState &uiState)
 
         ImGui::EndPopup();
     }
+
+    RenderFontRestartPopup(uiState);
 }
 
 // =============================================================================
@@ -216,9 +301,16 @@ bool LoadUiSettings(AppUiState &uiState)
         else if (key == "notesVisible")
             uiState.notesVisible = value == "1";
         else if (key == "compactDensity")
-            uiState.compactDensity = value == "1";
+            continue;
         else if (key == "autoSaveSetlists")
             uiState.autoSaveSetlists = value == "1";
+        else if (key == "fontMode")
+            uiState.fontMode = value == "manual" || value == "Manual" ||
+                                       value == "1"
+                                   ? AppFontMode::Manual
+                                   : AppFontMode::Auto;
+        else if (key == "fontSizePx")
+            uiState.fontSizePx = ParseFontSize(value, uiState.fontSizePx);
         else if (key == "sidebarWidthRatio")
             uiState.sidebarWidthRatio =
                 parseRatio(value, uiState.sidebarWidthRatio,
@@ -242,29 +334,15 @@ bool SaveUiSettings(const AppUiState &uiState)
     out << "PDF_MANAGER_UI_V1\n";
     out << "sidebarVisible=" << (uiState.sidebarVisible ? 1 : 0) << "\n";
     out << "notesVisible=" << (uiState.notesVisible ? 1 : 0) << "\n";
-    out << "compactDensity=" << (uiState.compactDensity ? 1 : 0) << "\n";
     out << "autoSaveSetlists=" << (uiState.autoSaveSetlists ? 1 : 0)
         << "\n";
+    out << "fontMode="
+        << (uiState.fontMode == AppFontMode::Manual ? "manual" : "auto")
+        << "\n";
+    out << "fontSizePx=" << uiState.fontSizePx << "\n";
     out << "sidebarWidthRatio=" << uiState.sidebarWidthRatio << "\n";
     out << "notesWidthRatio=" << uiState.notesWidthRatio << "\n";
     return true;
-}
-
-void ApplyUiDensity(const AppUiState &uiState)
-{
-    ImGuiStyle &style = ImGui::GetStyle();
-    if (uiState.compactDensity)
-    {
-        style.WindowPadding = ImVec2(9.0f, 7.0f);
-        style.FramePadding = ImVec2(7.0f, 4.0f);
-        style.ItemSpacing = ImVec2(6.0f, 4.0f);
-    }
-    else
-    {
-        style.WindowPadding = ImVec2(12.0f, 10.0f);
-        style.FramePadding = ImVec2(8.0f, 6.0f);
-        style.ItemSpacing = ImVec2(8.0f, 6.0f);
-    }
 }
 
 // =============================================================================
@@ -315,53 +393,9 @@ void RenderMainMenuBar(PdfLibrary &library,
             ImGui::MenuItem("Notes Panel", nullptr, &uiState.notesVisible);
 
             ImGui::Separator();
-            if (ImGui::MenuItem("Comfortable Density", nullptr,
-                                !uiState.compactDensity))
-                uiState.compactDensity = false;
-            if (ImGui::MenuItem("Compact Density", nullptr,
-                                uiState.compactDensity))
-                uiState.compactDensity = true;
-
-            ImGui::Separator();
             if (ImGui::MenuItem("Reset Zoom", nullptr, false,
                                 viewer.IsLoaded()))
                 viewer.ResetZoom();
-
-            ImGui::EndMenu();
-        }
-
-        if (ImGui::BeginMenu("Setlist"))
-        {
-            Setlist *selectedSetlist = nullptr;
-            if (selectedSetlistIndex >= 0 &&
-                selectedSetlistIndex <
-                    static_cast<int>(setlistManager.GetSetlistCount()))
-            {
-                selectedSetlist = setlistManager.GetSetlist(
-                    static_cast<size_t>(selectedSetlistIndex));
-            }
-
-            bool canActivate = selectedSetlist &&
-                               selectedSetlist->GetItemCount() > 0;
-            if (ImGui::MenuItem("Activate Selected", nullptr, false,
-                                canActivate))
-            {
-                if (setlistManager.ActivateSetlist(
-                        static_cast<size_t>(selectedSetlistIndex), viewer))
-                    uiState.notesVisible = true;
-            }
-
-            if (ImGui::MenuItem("Deactivate", nullptr, false,
-                                setlistManager.IsActive()))
-                setlistManager.Deactivate();
-
-            ImGui::Separator();
-            if (ImGui::MenuItem("Save Setlists", nullptr, false,
-                                setlistManager.GetSetlistCount() > 0))
-                SaveSetlists(setlistManager, uiState);
-            if (ImGui::MenuItem("Load Setlists"))
-                LoadSetlists(setlistManager, uiState, selectedSetlistIndex,
-                             selectedSetlistItemIndex);
 
             ImGui::EndMenu();
         }

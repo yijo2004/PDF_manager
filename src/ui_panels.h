@@ -6,13 +6,23 @@ class PdfLibrary;
 class PdfViewer;
 class SetlistManager;
 
+enum class AppFontMode
+{
+    Auto,
+    Manual
+};
+
 struct AppUiState
 {
     bool sidebarVisible = true;
     bool notesVisible = true;
-    bool compactDensity = false;
     bool autoSaveSetlists = true;
     bool settingsOpen = false;
+
+    AppFontMode fontMode = AppFontMode::Auto;
+    int fontSizePx = 22;
+    AppFontMode activeFontMode = AppFontMode::Auto;
+    int activeFontSizePx = 22;
 
     float sidebarWidthRatio = 0.24f;
     float notesWidthRatio = 0.22f;
@@ -21,11 +31,12 @@ struct AppUiState
     bool saveStatusVisible = false;
     bool saveStatusOk = false;
     float saveStatusTimer = 0.0f;
+    bool fontRestartPromptOpen = false;
+    bool exitRequested = false;
 };
 
 bool LoadUiSettings(AppUiState &uiState);
 bool SaveUiSettings(const AppUiState &uiState);
-void ApplyUiDensity(const AppUiState &uiState);
 
 void RenderMainMenuBar(PdfLibrary &library,
                        PdfViewer &viewer,
