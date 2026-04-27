@@ -1,9 +1,21 @@
 #include "app_init.h"
 
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
+
 #include <GLFW/glfw3.h>
 #include <fpdfview.h>
 
 #include <cstdio>
+#include <filesystem>
+#include <string>
 
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
@@ -13,6 +25,32 @@
 static void GlfwErrorCallback(int error, const char *description)
 {
     fprintf(stderr, "GLFW Error %d: %s\n", error, description);
+}
+
+static std::string RuntimeAssetPath(const char *filename)
+{
+#ifdef _WIN32
+    std::string exePath(MAX_PATH, '\0');
+    DWORD length = 0;
+
+    while (true)
+    {
+        length = GetModuleFileNameA(nullptr, exePath.data(),
+                                    static_cast<DWORD>(exePath.size()));
+        if (length == 0)
+            return filename;
+
+        if (length < exePath.size())
+            break;
+
+        exePath.resize(exePath.size() * 2);
+    }
+
+    exePath.resize(length);
+    return (std::filesystem::path(exePath).parent_path() / filename).string();
+#else
+    return filename;
+#endif
 }
 
 GLFWwindow *InitWindow(int width, int height, const char *title)
@@ -54,9 +92,10 @@ void InitImGui(GLFWwindow *window, const char *glslVersion)
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
     io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
 
-    // Load custom font with Korean support
+    // Load custom font with Korean support from the executable directory.
+    const std::string fontPath = RuntimeAssetPath("font.ttf");
     ImFont *font = io.Fonts->AddFontFromFileTTF(
-        "font.ttf", 22.0f, nullptr, io.Fonts->GetGlyphRangesKorean());
+        fontPath.c_str(), 22.0f, nullptr, io.Fonts->GetGlyphRangesKorean());
     if (!font)
     {
         printf("Failed to load font, using default.\n");

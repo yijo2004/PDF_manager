@@ -35,6 +35,7 @@ static const float MAX_NOTES_SIDEBAR_RATIO = 0.40f;
 static bool g_draggingHorizontal = false;
 static bool g_draggingVertical = false;
 static bool g_draggingRightSplitter = false;
+static bool g_notesInputActive = false;
 static const float SPLITTER_THICKNESS = 6.0f;
 
 // =============================================================================
@@ -546,11 +547,15 @@ void RenderControlsPanel(PdfViewer &viewer,
         bool canGoNext = setlistManager.IsActive()
                              ? setlistManager.CanGoNext(viewer)
                              : viewer.CanGoNext();
+        bool allowKeyboardPageNavigation =
+            !setlistManager.IsActive() || !g_notesInputActive;
         float halfWidth = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) * 0.5f;
 
         ImGui::BeginDisabled(!canGoPrevious);
-        if (PrimaryButton("< Prev", ImVec2(halfWidth, 0)) ||
-            ImGui::IsKeyPressed(ImGuiKey_LeftArrow))
+        bool previousClicked = PrimaryButton("< Prev", ImVec2(halfWidth, 0));
+        bool previousKeyPressed = allowKeyboardPageNavigation &&
+            ImGui::IsKeyPressed(ImGuiKey_LeftArrow);
+        if (previousClicked || previousKeyPressed)
         {
             if (setlistManager.IsActive())
                 setlistManager.Previous(viewer);
@@ -562,8 +567,10 @@ void RenderControlsPanel(PdfViewer &viewer,
         ImGui::SameLine();
 
         ImGui::BeginDisabled(!canGoNext);
-        if (PrimaryButton("Next >", ImVec2(-1, 0)) ||
-            ImGui::IsKeyPressed(ImGuiKey_RightArrow))
+        bool nextClicked = PrimaryButton("Next >", ImVec2(-1, 0));
+        bool nextKeyPressed = allowKeyboardPageNavigation &&
+            ImGui::IsKeyPressed(ImGuiKey_RightArrow);
+        if (nextClicked || nextKeyPressed)
         {
             if (setlistManager.IsActive())
                 setlistManager.Next(viewer);
@@ -772,14 +779,20 @@ void RenderNotesPanel(SetlistManager &setlistManager,
                       const ImGuiViewport *viewport)
 {
     if (!setlistManager.IsActive())
+    {
+        g_notesInputActive = false;
         return;
+    }
 
     Setlist *mutSetlist = setlistManager.GetSetlist(
         static_cast<size_t>(setlistManager.GetActiveSetlistIndex()));
     int activeIdx = setlistManager.GetActiveItemIndex();
     if (!mutSetlist || activeIdx < 0 ||
         activeIdx >= static_cast<int>(mutSetlist->GetItemCount()))
+    {
+        g_notesInputActive = false;
         return;
+    }
 
     float notesSidebarWidth = viewport->WorkSize.x * g_notesSidebarWidthRatio;
     float panelHeight = viewport->WorkSize.y;
@@ -817,8 +830,21 @@ void RenderNotesPanel(SetlistManager &setlistManager,
     }
 
     ImVec2 notesSize = ImVec2(-1, ImGui::GetContentRegionAvail().y);
-    if (ImGui::InputTextMultiline("##ItemNotes", notesBuf, sizeof(notesBuf),
-                                  notesSize))
+    bool notesChanged = ImGui::InputTextMultiline(
+        "##ItemNotes", notesBuf, sizeof(notesBuf), notesSize);
+    g_notesInputActive = ImGui::IsItemActive() || ImGui::IsItemFocused();
+    if (g_notesInputActive)
+    {
+        ImDrawList *drawList = ImGui::GetWindowDrawList();
+        ImVec2 min = ImGui::GetItemRectMin();
+        ImVec2 max = ImGui::GetItemRectMax();
+        ImU32 color = ImGui::ColorConvertFloat4ToU32(
+            ImVec4(0.52f, 0.75f, 1.0f, 1.0f));
+        drawList->AddRect(ImVec2(min.x - 2.0f, min.y - 2.0f),
+                          ImVec2(max.x + 2.0f, max.y + 2.0f),
+                          color, 4.0f, 0, 2.0f);
+    }
+    if (notesChanged)
     {
         mutSetlist->SetItemNotes(static_cast<size_t>(activeIdx),
                                  std::string(notesBuf));
