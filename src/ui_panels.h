@@ -18,6 +18,7 @@ struct AppUiState
     bool notesVisible = true;
     bool autoSaveSetlists = true;
     bool settingsOpen = false;
+    bool createSetlistOpen = false;
 
     AppFontMode fontMode = AppFontMode::Auto;
     int fontSizePx = 22;

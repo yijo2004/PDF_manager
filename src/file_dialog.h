@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <vector>
 
 /**
  * @brief Platform-specific file dialog utilities.
@@ -12,6 +13,12 @@ namespace FileDialog
      * @return The selected file path (UTF-8 encoded), or empty string if cancelled.
      */
     std::string OpenPDF();
+
+    /**
+     * @brief Open a native file dialog to select one or more PDF files.
+     * @return The selected file paths (UTF-8 encoded), or empty if cancelled.
+     */
+    std::vector<std::string> OpenMultiplePDFs();
     
     /**
      * @brief Open a native file dialog to select any file with custom filters.
