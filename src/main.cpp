@@ -15,22 +15,23 @@
 #endif
 
 #include <GLFW/glfw3.h>
-#include <fpdfview.h>
 
-#include <algorithm>
-#include <cstdint>
 #include <cstdio>
+<<<<<<< HEAD
 #include <cstring>
 #include <filesystem>
+=======
+>>>>>>> bb23fd397285377430692630563ed0e7c2f9dba9
 #include <string>
 
-#include "file_dialog.h"
+#include "app_init.h"
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
 #include "pdf_library.h"
 #include "pdf_viewer.h"
 #include "setlist_gen.h"
+<<<<<<< HEAD
 
 // =============================================================================
 // Error Callbacks
@@ -1108,6 +1109,9 @@ static void RenderViewerPanel(const PdfViewer &viewer,
 // =============================================================================
 // Main Application
 // =============================================================================
+=======
+#include "ui_panels.h"
+>>>>>>> bb23fd397285377430692630563ed0e7c2f9dba9
 
 int main(int, char **)
 {
