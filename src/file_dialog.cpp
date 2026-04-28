@@ -7,7 +7,6 @@
 #include <shlobj.h>
 #include <shobjidl.h>
 #include <string>
-#include <vector>
 
 namespace
 {
@@ -51,77 +50,6 @@ namespace FileDialog
     std::string OpenPDF()
     {
         return Open("PDF Files", "*.pdf");
-    }
-
-    std::vector<std::string> OpenMultiplePDFs()
-    {
-        std::vector<std::string> results;
-
-        IFileOpenDialog* pfd = nullptr;
-        HRESULT hr = CoCreateInstance(CLSID_FileOpenDialog, NULL,
-                                      CLSCTX_INPROC_SERVER,
-                                      IID_PPV_ARGS(&pfd));
-
-        if (SUCCEEDED(hr))
-        {
-            COMDLG_FILTERSPEC filters[] = {
-                {L"PDF Files (*.pdf)", L"*.pdf"},
-                {L"All Files (*.*)", L"*.*"},
-            };
-            pfd->SetFileTypes(2, filters);
-            pfd->SetFileTypeIndex(1);
-
-            DWORD dwOptions;
-            hr = pfd->GetOptions(&dwOptions);
-            if (SUCCEEDED(hr))
-            {
-                hr = pfd->SetOptions(dwOptions | FOS_ALLOWMULTISELECT |
-                                     FOS_FORCEFILESYSTEM |
-                                     FOS_FILEMUSTEXIST);
-            }
-
-            if (SUCCEEDED(hr))
-                hr = pfd->SetTitle(L"Select PDF Files");
-
-            if (SUCCEEDED(hr))
-                hr = pfd->Show(NULL);
-
-            if (SUCCEEDED(hr))
-            {
-                IShellItemArray* items = nullptr;
-                hr = pfd->GetResults(&items);
-                if (SUCCEEDED(hr))
-                {
-                    DWORD count = 0;
-                    hr = items->GetCount(&count);
-                    if (SUCCEEDED(hr))
-                    {
-                        results.reserve(count);
-                        for (DWORD i = 0; i < count; i++)
-                        {
-                            IShellItem* item = nullptr;
-                            if (SUCCEEDED(items->GetItemAt(i, &item)))
-                            {
-                                PWSTR pszPath = nullptr;
-                                HRESULT pathHr = item->GetDisplayName(
-                                    SIGDN_FILESYSPATH, &pszPath);
-                                if (SUCCEEDED(pathHr) && pszPath)
-                                {
-                                    results.push_back(WideToUtf8(pszPath));
-                                    CoTaskMemFree(pszPath);
-                                }
-                                item->Release();
-                            }
-                        }
-                    }
-                    items->Release();
-                }
-            }
-
-            pfd->Release();
-        }
-
-        return results;
     }
 
     std::string Open(const char* filterName, const char* filterPattern)
@@ -231,12 +159,6 @@ namespace FileDialog
     {
         printf("[FileDialog] File dialogs not implemented for this platform.\n");
         return "";
-    }
-
-    std::vector<std::string> OpenMultiplePDFs()
-    {
-        printf("[FileDialog] File dialogs not implemented for this platform.\n");
-        return {};
     }
 
     std::string Open(const char* /*filterName*/, const char* /*filterPattern*/)

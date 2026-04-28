@@ -18,7 +18,6 @@
 #include <filesystem>
 #include <fstream>
 #include <string>
-#include <vector>
 
 #include "file_dialog.h"
 #include "imgui.h"
@@ -115,24 +114,6 @@ static void OpenLibraryFolder(PdfLibrary &library,
         selectedFileIndex = -1;
         setlistManager.Deactivate();
         viewer.Close();
-    }
-}
-
-static std::string FilenameFromPath(const std::string &path)
-{
-    size_t slash = path.find_last_of("/\\");
-    if (slash == std::string::npos)
-        return path;
-    return path.substr(slash + 1);
-}
-
-static void AddPdfFilesToSetlist(Setlist &setlist,
-                                 const std::vector<std::string> &paths)
-{
-    for (const std::string &path : paths)
-    {
-        if (!path.empty())
-            setlist.AddItem(FilenameFromPath(path), path);
     }
 }
 
@@ -280,49 +261,6 @@ static void RenderSettingsPopup(AppUiState &uiState)
     RenderFontRestartPopup(uiState);
 }
 
-static void RenderCreateSetlistPopup(SetlistManager &setlistManager,
-                                     AppUiState &uiState,
-                                     int &selectedSetlistIndex,
-                                     int &selectedSetlistItemIndex)
-{
-    static char newSetlistName[64] = "";
-
-    if (uiState.createSetlistOpen)
-    {
-        ImGui::OpenPopup("Create Setlist");
-        uiState.createSetlistOpen = false;
-    }
-
-    if (ImGui::BeginPopupModal("Create Setlist", nullptr,
-                               ImGuiWindowFlags_AlwaysAutoResize))
-    {
-        ImGui::TextUnformatted("Setlist name");
-        ImGui::SetNextItemWidth(320.0f);
-        bool enterPressed = ImGui::InputText(
-            "##CreateSetlistName", newSetlistName,
-            IM_ARRAYSIZE(newSetlistName),
-            ImGuiInputTextFlags_EnterReturnsTrue);
-
-        ImGui::Separator();
-        if (PrimaryButton("Create", ImVec2(120.0f, 0.0f)) || enterPressed)
-        {
-            size_t newIndex = setlistManager.CreateSetlist(newSetlistName);
-            selectedSetlistIndex = static_cast<int>(newIndex);
-            selectedSetlistItemIndex = -1;
-            newSetlistName[0] = '\0';
-            ImGui::CloseCurrentPopup();
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("Cancel", ImVec2(100.0f, 0.0f)))
-        {
-            newSetlistName[0] = '\0';
-            ImGui::CloseCurrentPopup();
-        }
-
-        ImGui::EndPopup();
-    }
-}
-
 // =============================================================================
 // Settings persistence
 // =============================================================================
@@ -431,9 +369,6 @@ void RenderMainMenuBar(PdfLibrary &library,
                                 library.IsLoaded()))
                 library.Refresh();
 
-            if (ImGui::MenuItem("Create Setlist..."))
-                uiState.createSetlistOpen = true;
-
             ImGui::Separator();
             if (ImGui::MenuItem("Save Setlists", nullptr, false,
                                 setlistManager.GetSetlistCount() > 0))
@@ -474,21 +409,6 @@ void RenderMainMenuBar(PdfLibrary &library,
             ImGui::EndMenu();
         }
 
-        ImGui::SameLine();
-        ImGui::TextDisabled("|");
-        ImGui::SameLine();
-        if (ImGui::SmallButton("Open Folder"))
-            OpenLibraryFolder(library, viewer, setlistManager,
-                              selectedFileIndex);
-        ImGui::SameLine();
-        ImGui::BeginDisabled(!library.IsLoaded());
-        if (ImGui::SmallButton("Refresh"))
-            library.Refresh();
-        ImGui::EndDisabled();
-        ImGui::SameLine();
-        if (ImGui::SmallButton("Create Setlist"))
-            uiState.createSetlistOpen = true;
-
         if (uiState.saveStatusVisible)
         {
             uiState.saveStatusTimer -= ImGui::GetIO().DeltaTime;
@@ -509,8 +429,6 @@ void RenderMainMenuBar(PdfLibrary &library,
     }
 
     RenderSettingsPopup(uiState);
-    RenderCreateSetlistPopup(setlistManager, uiState, selectedSetlistIndex,
-                             selectedSetlistItemIndex);
 }
 
 // =============================================================================
@@ -541,6 +459,19 @@ void RenderLibraryPanel(PdfLibrary &library,
 
     if (ImGui::CollapsingHeader("Library", ImGuiTreeNodeFlags_DefaultOpen))
     {
+        float halfWidth =
+            (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x)
+            * 0.5f;
+
+        if (PrimaryButton("Open Folder", ImVec2(halfWidth, 0.0f)))
+            OpenLibraryFolder(library, viewer, setlistManager, selectedIndex);
+
+        ImGui::SameLine();
+        ImGui::BeginDisabled(!library.IsLoaded());
+        if (ImGui::Button("Refresh", ImVec2(-1.0f, 0.0f)))
+            library.Refresh();
+        ImGui::EndDisabled();
+
         if (library.IsLoaded())
         {
             ImGui::TextColored(ImVec4(0.70f, 0.78f, 0.88f, 1.0f), "%s",
@@ -584,6 +515,20 @@ void RenderLibraryPanel(PdfLibrary &library,
 
     if (ImGui::CollapsingHeader("Setlists", ImGuiTreeNodeFlags_DefaultOpen))
     {
+        static char newSetlistName[64] = "";
+        ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 76.0f);
+        bool enterPressed = ImGui::InputText(
+            "##NewSetlistName", newSetlistName, IM_ARRAYSIZE(newSetlistName),
+            ImGuiInputTextFlags_EnterReturnsTrue);
+        ImGui::SameLine();
+        if (PrimaryButton("Create", ImVec2(-1.0f, 0.0f)) || enterPressed)
+        {
+            size_t newIndex = setlistManager.CreateSetlist(newSetlistName);
+            selectedSetlistIndex = static_cast<int>(newIndex);
+            selectedSetlistItemIndex = -1;
+            newSetlistName[0] = '\0';
+        }
+
         float setlistHeight = 110.0f;
         ImGui::BeginChild("SetlistList", ImVec2(0.0f, setlistHeight), true);
         const auto &setlists = setlistManager.GetSetlists();
@@ -662,9 +607,37 @@ void RenderLibraryPanel(PdfLibrary &library,
             ImGui::TextColored(ImVec4(0.70f, 0.78f, 0.88f, 1.0f), "%s",
                                selectedSetlist->GetName().c_str());
 
-            if (PrimaryButton("Add PDFs...", ImVec2(-1.0f, 0.0f)))
-                AddPdfFilesToSetlist(*selectedSetlist,
-                                     FileDialog::OpenMultiplePDFs());
+            bool hasFiles = library.GetFileCount() > 0;
+            ImGui::BeginDisabled(!hasFiles);
+            const auto &files = library.GetFiles();
+            static int comboFileIndex = 0;
+            if (comboFileIndex >= static_cast<int>(files.size()))
+                comboFileIndex = 0;
+
+            const char *previewName = files.empty()
+                                          ? "No PDFs loaded"
+                                          : files[static_cast<size_t>(
+                                                comboFileIndex)].filename.c_str();
+            ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 48.0f);
+            if (ImGui::BeginCombo("##AddPdfToSetlist", previewName))
+            {
+                for (size_t i = 0; i < files.size(); i++)
+                {
+                    bool selected = static_cast<int>(i) == comboFileIndex;
+                    std::string label =
+                        files[i].filename + "##combo_" + std::to_string(i);
+                    if (ImGui::Selectable(label.c_str(), selected))
+                        comboFileIndex = static_cast<int>(i);
+                    if (selected)
+                        ImGui::SetItemDefaultFocus();
+                }
+                ImGui::EndCombo();
+            }
+            ImGui::SameLine();
+            if (PrimaryButton("Add", ImVec2(-1.0f, 0.0f)) && !files.empty())
+                selectedSetlist->AddItem(files[static_cast<size_t>(
+                    comboFileIndex)]);
+            ImGui::EndDisabled();
 
             float buttonAreaHeight =
                 ImGui::GetFrameHeightWithSpacing() * 2.2f;
