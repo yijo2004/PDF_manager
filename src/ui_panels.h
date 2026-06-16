@@ -23,6 +23,7 @@ struct AppUiState
     int fontSizePx = 22;
     AppFontMode activeFontMode = AppFontMode::Auto;
     int activeFontSizePx = 22;
+    int autoFontSizePx = 22;
 
     float sidebarWidthRatio = 0.24f;
     float notesWidthRatio = 0.22f;

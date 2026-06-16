@@ -57,6 +57,7 @@ int main(int, char **)
 
         // Update viewer (renders page if needed)
         viewer.Update();
+        uiState.autoFontSizePx = ChooseAutoAppFontSizePx(window);
 
         // Begin ImGui frame
         ImGui_ImplOpenGL3_NewFrame();

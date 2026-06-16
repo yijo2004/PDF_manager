@@ -38,6 +38,13 @@ static const float SPLITTER_THICKNESS = 6.0f;
 static const float TOOLBAR_HEIGHT = 50.0f;
 static const int FONT_SIZE_OPTIONS[] = {18, 20, 22, 24, 26, 30};
 
+enum class SidebarSection
+{
+    None,
+    Library,
+    Setlists
+};
+
 static bool g_draggingSidebar = false;
 static bool g_draggingNotes = false;
 
@@ -237,14 +244,16 @@ static void RenderSettingsPopup(AppUiState &uiState)
                         &uiState.autoSaveSetlists);
 
         ImGui::Separator();
+        std::string autoFontLabel =
+            "Auto (" + std::to_string(uiState.autoFontSizePx) + " px)";
         std::string fontPreview =
             uiState.fontMode == AppFontMode::Auto
-                ? "Auto"
+                ? autoFontLabel
                 : std::to_string(uiState.fontSizePx) + " px";
         if (ImGui::BeginCombo("Font size", fontPreview.c_str()))
         {
             bool autoSelected = uiState.fontMode == AppFontMode::Auto;
-            if (ImGui::Selectable("Auto", autoSelected))
+            if (ImGui::Selectable(autoFontLabel.c_str(), autoSelected))
                 uiState.fontMode = AppFontMode::Auto;
             if (autoSelected)
                 ImGui::SetItemDefaultFocus();
@@ -481,7 +490,17 @@ void RenderLibraryPanel(PdfLibrary &library,
                              ImGuiWindowFlags_NoResize;
     ImGui::Begin("Library / Setlists", nullptr, flags);
 
-    if (ImGui::CollapsingHeader("Library", ImGuiTreeNodeFlags_DefaultOpen))
+    static SidebarSection openSection = SidebarSection::None;
+
+    ImGui::SetNextItemOpen(openSection == SidebarSection::Library,
+                           ImGuiCond_Always);
+    bool libraryOpen = ImGui::CollapsingHeader("Library");
+    if (libraryOpen != (openSection == SidebarSection::Library))
+        openSection = libraryOpen ? SidebarSection::Library
+                                  : SidebarSection::None;
+    libraryOpen = openSection == SidebarSection::Library;
+
+    if (libraryOpen)
     {
         float halfWidth =
             (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x)
@@ -537,7 +556,15 @@ void RenderLibraryPanel(PdfLibrary &library,
         }
     }
 
-    if (ImGui::CollapsingHeader("Setlists", ImGuiTreeNodeFlags_DefaultOpen))
+    ImGui::SetNextItemOpen(openSection == SidebarSection::Setlists,
+                           ImGuiCond_Always);
+    bool setlistsOpen = ImGui::CollapsingHeader("Setlists");
+    if (setlistsOpen != (openSection == SidebarSection::Setlists))
+        openSection = setlistsOpen ? SidebarSection::Setlists
+                                   : SidebarSection::None;
+    setlistsOpen = openSection == SidebarSection::Setlists;
+
+    if (setlistsOpen)
     {
         static char setlistSearch[64] = "";
         static char newSetlistName[64] = "";
@@ -651,25 +678,73 @@ void RenderLibraryPanel(PdfLibrary &library,
         ImGui::EndDisabled();
 
         ImGui::SameLine();
+        static int pendingDeleteSetlistIndex = -1;
+        static std::string pendingDeleteSetlistName;
         ImGui::BeginDisabled(selectedSetlistIndex < 0);
         if (ImGui::Button("Remove", ImVec2(-1.0f, 0.0f)))
         {
-            size_t removeIndex = static_cast<size_t>(selectedSetlistIndex);
-            int newSelected = -1;
-            if (static_cast<int>(setlistManager.GetSetlistCount()) > 1)
-                newSelected = selectedSetlistIndex > 0
-                                  ? selectedSetlistIndex - 1
-                                  : 0;
-            setlistManager.RemoveSetlist(removeIndex);
-            selectedSetlistIndex = newSelected;
-            selectedSetlistItemIndex = -1;
-            selectedSetlist = selectedSetlistIndex >= 0
-                                  ? setlistManager.GetSetlist(
-                                        static_cast<size_t>(
-                                            selectedSetlistIndex))
-                                  : nullptr;
+            pendingDeleteSetlistIndex = selectedSetlistIndex;
+            pendingDeleteSetlistName =
+                selectedSetlist ? selectedSetlist->GetName() : "";
+            ImGui::OpenPopup("Delete Setlist");
         }
         ImGui::EndDisabled();
+
+        if (ImGui::BeginPopupModal("Delete Setlist", nullptr,
+                                   ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            bool hasPendingDelete =
+                pendingDeleteSetlistIndex >= 0 &&
+                pendingDeleteSetlistIndex <
+                    static_cast<int>(setlistManager.GetSetlistCount());
+
+            if (hasPendingDelete)
+            {
+                ImGui::Text("Delete setlist \"%s\"?",
+                            pendingDeleteSetlistName.c_str());
+                ImGui::TextDisabled("This cannot be undone.");
+                ImGui::Spacing();
+
+                if (PrimaryButton("Delete", ImVec2(120.0f, 0.0f)))
+                {
+                    size_t removeIndex =
+                        static_cast<size_t>(pendingDeleteSetlistIndex);
+                    int newSelected = -1;
+                    if (static_cast<int>(setlistManager.GetSetlistCount()) > 1)
+                        newSelected = pendingDeleteSetlistIndex > 0
+                                          ? pendingDeleteSetlistIndex - 1
+                                          : 0;
+
+                    setlistManager.RemoveSetlist(removeIndex);
+                    selectedSetlistIndex = newSelected;
+                    selectedSetlistItemIndex = -1;
+                    selectedSetlist =
+                        selectedSetlistIndex >= 0
+                            ? setlistManager.GetSetlist(static_cast<size_t>(
+                                  selectedSetlistIndex))
+                            : nullptr;
+                    pendingDeleteSetlistIndex = -1;
+                    pendingDeleteSetlistName.clear();
+                    ImGui::CloseCurrentPopup();
+                }
+
+                ImGui::SameLine();
+                if (ImGui::Button("Cancel", ImVec2(120.0f, 0.0f)))
+                {
+                    pendingDeleteSetlistIndex = -1;
+                    pendingDeleteSetlistName.clear();
+                    ImGui::CloseCurrentPopup();
+                }
+            }
+            else
+            {
+                pendingDeleteSetlistIndex = -1;
+                pendingDeleteSetlistName.clear();
+                ImGui::CloseCurrentPopup();
+            }
+
+            ImGui::EndPopup();
+        }
 
         if (selectedSetlist)
         {
