@@ -102,6 +102,30 @@ static bool LoadSetlists(SetlistManager &setlistManager,
     return ok;
 }
 
+static char ToLowerAscii(char c)
+{
+    if (c >= 'A' && c <= 'Z')
+        return static_cast<char>(c - 'A' + 'a');
+    return c;
+}
+
+static bool FuzzyMatch(const char *text, const char *query)
+{
+    if (!query || query[0] == '\0')
+        return true;
+    if (!text)
+        return false;
+
+    while (*text && *query)
+    {
+        if (ToLowerAscii(*text) == ToLowerAscii(*query))
+            query++;
+        text++;
+    }
+
+    return *query == '\0';
+}
+
 static void OpenLibraryFolder(PdfLibrary &library,
                               PdfViewer &viewer,
                               SetlistManager &setlistManager,
@@ -515,26 +539,70 @@ void RenderLibraryPanel(PdfLibrary &library,
 
     if (ImGui::CollapsingHeader("Setlists", ImGuiTreeNodeFlags_DefaultOpen))
     {
+        static char setlistSearch[64] = "";
         static char newSetlistName[64] = "";
-        ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 76.0f);
-        bool enterPressed = ImGui::InputText(
-            "##NewSetlistName", newSetlistName, IM_ARRAYSIZE(newSetlistName),
-            ImGuiInputTextFlags_EnterReturnsTrue);
-        ImGui::SameLine();
-        if (PrimaryButton("Create", ImVec2(-1.0f, 0.0f)) || enterPressed)
+        static bool focusNewSetlistName = false;
+
+        if (PrimaryButton("Create Setlist", ImVec2(-1.0f, 0.0f)))
         {
-            size_t newIndex = setlistManager.CreateSetlist(newSetlistName);
-            selectedSetlistIndex = static_cast<int>(newIndex);
-            selectedSetlistItemIndex = -1;
             newSetlistName[0] = '\0';
+            focusNewSetlistName = true;
+            ImGui::OpenPopup("Create Setlist");
         }
+
+        if (ImGui::BeginPopupModal("Create Setlist", nullptr,
+                                   ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            ImGui::TextUnformatted("Setlist name");
+            ImGui::SetNextItemWidth(320.0f);
+            if (focusNewSetlistName)
+            {
+                ImGui::SetKeyboardFocusHere();
+                focusNewSetlistName = false;
+            }
+
+            bool enterPressed = ImGui::InputText(
+                "##NewSetlistName", newSetlistName,
+                IM_ARRAYSIZE(newSetlistName),
+                ImGuiInputTextFlags_EnterReturnsTrue);
+
+            bool createClicked =
+                PrimaryButton("Create", ImVec2(120.0f, 0.0f));
+            if (enterPressed || createClicked)
+            {
+                size_t newIndex =
+                    setlistManager.CreateSetlist(newSetlistName);
+                selectedSetlistIndex = static_cast<int>(newIndex);
+                selectedSetlistItemIndex = -1;
+                newSetlistName[0] = '\0';
+                ImGui::CloseCurrentPopup();
+            }
+
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel", ImVec2(120.0f, 0.0f)))
+            {
+                newSetlistName[0] = '\0';
+                ImGui::CloseCurrentPopup();
+            }
+
+            ImGui::EndPopup();
+        }
+
+        ImGui::SetNextItemWidth(-1.0f);
+        ImGui::InputTextWithHint("##SetlistSearch", "Search setlists...",
+                                 setlistSearch, IM_ARRAYSIZE(setlistSearch));
 
         float setlistHeight = 110.0f;
         ImGui::BeginChild("SetlistList", ImVec2(0.0f, setlistHeight), true);
         const auto &setlists = setlistManager.GetSetlists();
+        bool hasVisibleSetlists = false;
         for (size_t i = 0; i < setlists.size(); i++)
         {
             const Setlist &setlist = setlists[i];
+            if (!FuzzyMatch(setlist.GetName().c_str(), setlistSearch))
+                continue;
+
+            hasVisibleSetlists = true;
             bool isSelected = static_cast<int>(i) == selectedSetlistIndex;
             bool isActive = setlistManager.IsActive() &&
                             setlistManager.GetActiveSetlistIndex() ==
@@ -553,6 +621,8 @@ void RenderLibraryPanel(PdfLibrary &library,
         }
         if (setlists.empty())
             ImGui::TextDisabled("No setlists yet.");
+        else if (!hasVisibleSetlists)
+            ImGui::TextDisabled("No matching setlists.");
         ImGui::EndChild();
 
         Setlist *selectedSetlist = nullptr;
