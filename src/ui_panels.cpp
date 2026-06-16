@@ -242,6 +242,8 @@ static void RenderSettingsPopup(AppUiState &uiState)
         ImGui::Checkbox("Show notes during setlists", &uiState.notesVisible);
         ImGui::Checkbox("Auto-save setlists on exit",
                         &uiState.autoSaveSetlists);
+        ImGui::Checkbox("Restore last library and setlist",
+                        &uiState.restoreLastSession);
 
         ImGui::Separator();
         std::string autoFontLabel =
@@ -337,6 +339,8 @@ bool LoadUiSettings(AppUiState &uiState)
             continue;
         else if (key == "autoSaveSetlists")
             uiState.autoSaveSetlists = value == "1";
+        else if (key == "restoreLastSession")
+            uiState.restoreLastSession = value == "1";
         else if (key == "fontMode")
             uiState.fontMode = value == "manual" || value == "Manual" ||
                                        value == "1"
@@ -352,6 +356,21 @@ bool LoadUiSettings(AppUiState &uiState)
             uiState.notesWidthRatio =
                 parseRatio(value, uiState.notesWidthRatio, MIN_NOTES_RATIO,
                            MAX_NOTES_RATIO);
+        else if (key == "lastLibraryPath")
+            uiState.lastLibraryPath = value;
+        else if (key == "lastSetlistIndex")
+        {
+            try
+            {
+                uiState.lastSetlistIndex = std::stoi(value);
+            }
+            catch (...)
+            {
+                uiState.lastSetlistIndex = -1;
+            }
+        }
+        else if (key == "lastSetlistName")
+            uiState.lastSetlistName = value;
     }
 
     return true;
@@ -369,12 +388,17 @@ bool SaveUiSettings(const AppUiState &uiState)
     out << "notesVisible=" << (uiState.notesVisible ? 1 : 0) << "\n";
     out << "autoSaveSetlists=" << (uiState.autoSaveSetlists ? 1 : 0)
         << "\n";
+    out << "restoreLastSession=" << (uiState.restoreLastSession ? 1 : 0)
+        << "\n";
     out << "fontMode="
         << (uiState.fontMode == AppFontMode::Manual ? "manual" : "auto")
         << "\n";
     out << "fontSizePx=" << uiState.fontSizePx << "\n";
     out << "sidebarWidthRatio=" << uiState.sidebarWidthRatio << "\n";
     out << "notesWidthRatio=" << uiState.notesWidthRatio << "\n";
+    out << "lastLibraryPath=" << uiState.lastLibraryPath << "\n";
+    out << "lastSetlistIndex=" << uiState.lastSetlistIndex << "\n";
+    out << "lastSetlistName=" << uiState.lastSetlistName << "\n";
     return true;
 }
 
@@ -491,6 +515,11 @@ void RenderLibraryPanel(PdfLibrary &library,
     ImGui::Begin("Library / Setlists", nullptr, flags);
 
     static SidebarSection openSection = SidebarSection::None;
+    if (uiState.setlistsPanelOpenRequested)
+    {
+        openSection = SidebarSection::Setlists;
+        uiState.setlistsPanelOpenRequested = false;
+    }
 
     ImGui::SetNextItemOpen(openSection == SidebarSection::Library,
                            ImGuiCond_Always);

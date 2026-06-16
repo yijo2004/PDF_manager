@@ -1,5 +1,7 @@
 #pragma once
 
+#include <string>
+
 #include "imgui.h"
 
 class PdfLibrary;
@@ -17,6 +19,7 @@ struct AppUiState
     bool sidebarVisible = true;
     bool notesVisible = true;
     bool autoSaveSetlists = true;
+    bool restoreLastSession = false;
     bool settingsOpen = false;
 
     AppFontMode fontMode = AppFontMode::Auto;
@@ -34,6 +37,11 @@ struct AppUiState
     float saveStatusTimer = 0.0f;
     bool fontRestartPromptOpen = false;
     bool exitRequested = false;
+    bool setlistsPanelOpenRequested = false;
+
+    std::string lastLibraryPath;
+    int lastSetlistIndex = -1;
+    std::string lastSetlistName;
 };
 
 bool LoadUiSettings(AppUiState &uiState);

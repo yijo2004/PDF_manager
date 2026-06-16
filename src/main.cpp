@@ -18,6 +18,53 @@
 #include "setlist_gen.h"
 #include "ui_panels.h"
 
+static int FindRestoredSetlistIndex(const SetlistManager &setlistManager,
+                                    const AppUiState &uiState)
+{
+    const auto &setlists = setlistManager.GetSetlists();
+
+    if (!uiState.lastSetlistName.empty())
+    {
+        for (size_t i = 0; i < setlists.size(); i++)
+        {
+            if (setlists[i].GetName() == uiState.lastSetlistName)
+                return static_cast<int>(i);
+        }
+    }
+
+    if (uiState.lastSetlistIndex >= 0 &&
+        uiState.lastSetlistIndex < static_cast<int>(setlists.size()))
+    {
+        return uiState.lastSetlistIndex;
+    }
+
+    return -1;
+}
+
+static void CaptureSessionState(AppUiState &uiState,
+                                const PdfLibrary &library,
+                                const SetlistManager &setlistManager,
+                                int selectedSetlistIndex)
+{
+    uiState.lastLibraryPath =
+        library.IsLoaded() ? library.GetFolderPath() : "";
+
+    int setlistIndex = setlistManager.IsActive()
+                           ? setlistManager.GetActiveSetlistIndex()
+                           : selectedSetlistIndex;
+    uiState.lastSetlistIndex = setlistIndex;
+    uiState.lastSetlistName.clear();
+
+    if (setlistIndex >= 0 &&
+        setlistIndex < static_cast<int>(setlistManager.GetSetlistCount()))
+    {
+        const Setlist *setlist =
+            setlistManager.GetSetlist(static_cast<size_t>(setlistIndex));
+        if (setlist)
+            uiState.lastSetlistName = setlist->GetName();
+    }
+}
+
 int main(int, char **)
 {
     // Initialize systems
@@ -40,14 +87,37 @@ int main(int, char **)
     uiState.activeFontMode = uiState.fontMode;
     uiState.activeFontSizePx = uiState.fontSizePx;
 
+    if (uiState.restoreLastSession && !uiState.lastLibraryPath.empty())
+    {
+        if (library.LoadFolder(uiState.lastLibraryPath))
+            printf("[App] Restored library %s\n",
+                   uiState.lastLibraryPath.c_str());
+    }
+
     // Auto-load saved setlists
     {
         std::string savePath = SetlistManager::GetDefaultSavePath();
         if (setlistManager.LoadFromFile(savePath))
         {
             printf("[App] Loaded setlists from %s\n", savePath.c_str());
-            if (setlistManager.GetSetlistCount() > 0)
+            if (uiState.restoreLastSession)
+            {
+                selectedSetlistIndex =
+                    FindRestoredSetlistIndex(setlistManager, uiState);
+                if (selectedSetlistIndex >= 0)
+                {
+                    if (setlistManager.ActivateSetlist(
+                            static_cast<size_t>(selectedSetlistIndex), viewer))
+                    {
+                        uiState.sidebarVisible = true;
+                        uiState.setlistsPanelOpenRequested = true;
+                    }
+                }
+            }
+            else if (setlistManager.GetSetlistCount() > 0)
+            {
                 selectedSetlistIndex = 0;
+            }
         }
     }
 
@@ -58,6 +128,8 @@ int main(int, char **)
         // Update viewer (renders page if needed)
         viewer.Update();
         uiState.autoFontSizePx = ChooseAutoAppFontSizePx(window);
+        CaptureSessionState(uiState, library, setlistManager,
+                            selectedSetlistIndex);
 
         // Begin ImGui frame
         ImGui_ImplOpenGL3_NewFrame();
@@ -116,6 +188,7 @@ int main(int, char **)
         if (setlistManager.SaveToFile(savePath))
             printf("[App] Saved setlists to %s\n", savePath.c_str());
     }
+    CaptureSessionState(uiState, library, setlistManager, selectedSetlistIndex);
     SaveUiSettings(uiState);
 
     // Cleanup
