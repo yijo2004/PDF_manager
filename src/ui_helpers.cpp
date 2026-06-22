@@ -58,6 +58,21 @@ bool PrimaryButton(const char *label, const ImVec2 &size)
     return clicked;
 }
 
+bool SecondaryButton(const char *label, const ImVec2 &size)
+{
+    return ImGui::Button(label, size);
+}
+
+bool SubtleButton(const char *label, const ImVec2 &size)
+{
+    return ImGui::Button(label, size);
+}
+
+bool DangerButton(const char *label, const ImVec2 &size)
+{
+    return ImGui::Button(label, size);
+}
+
 void SectionTitle(const char *title)
 {
     ImGui::Spacing();
@@ -65,4 +80,26 @@ void SectionTitle(const char *title)
     ImGui::TextUnformatted(title);
     ImGui::PopStyleColor();
     ImGui::Separator();
+}
+
+void StatusBadge(const char *label, const ImVec4 &color)
+{
+    ImVec2 textSize = ImGui::CalcTextSize(label);
+    ImVec2 pos = ImGui::GetCursorScreenPos();
+    ImVec2 pad = ImVec2(9.0f, 4.0f);
+    ImVec2 size = ImVec2(textSize.x + pad.x * 2.0f,
+                         textSize.y + pad.y * 2.0f);
+
+    ImDrawList *drawList = ImGui::GetWindowDrawList();
+    ImVec4 bg = ImVec4(color.x, color.y, color.z, 0.18f);
+    ImVec4 border = ImVec4(color.x, color.y, color.z, 0.42f);
+    drawList->AddRectFilled(pos, ImVec2(pos.x + size.x, pos.y + size.y),
+                            ImGui::ColorConvertFloat4ToU32(bg), 99.0f);
+    drawList->AddRect(pos, ImVec2(pos.x + size.x, pos.y + size.y),
+                      ImGui::ColorConvertFloat4ToU32(border), 99.0f);
+
+    ImVec2 textPos = ImVec2(pos.x + pad.x,
+                            pos.y + (size.y - textSize.y) * 0.5f);
+    drawList->AddText(textPos, ImGui::ColorConvertFloat4ToU32(color), label);
+    ImGui::Dummy(size);
 }
