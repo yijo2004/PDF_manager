@@ -126,6 +126,76 @@ static bool FuzzyMatch(const char *text, const char *query)
     return *query == '\0';
 }
 
+static void TooltipIfHovered(const char *text)
+{
+    if (text && text[0] != '\0' &&
+        ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip |
+                             ImGuiHoveredFlags_AllowWhenDisabled))
+        ImGui::SetTooltip("%s", text);
+}
+
+static float BadgeWidth(const char *label)
+{
+    ImVec2 textSize = ImGui::CalcTextSize(label);
+    return textSize.x + 18.0f;
+}
+
+static void ClippedText(const char *id,
+                        const char *text,
+                        float width,
+                        const ImVec4 &color)
+{
+    width = (std::max)(0.0f, width);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+    ImGuiWindowFlags flags = ImGuiWindowFlags_NoScrollbar |
+                             ImGuiWindowFlags_NoScrollWithMouse |
+                             ImGuiWindowFlags_NoBackground;
+    ImGui::BeginChild(id, ImVec2(width, ImGui::GetFrameHeight()), false,
+                      flags);
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextColored(color, "%s", text);
+    TooltipIfHovered(text);
+    ImGui::EndChild();
+    ImGui::PopStyleVar();
+}
+
+static void HeaderWithBadge(const char *id,
+                            const char *title,
+                            const char *tooltip,
+                            const char *badge,
+                            const ImVec4 &badgeColor)
+{
+    float availableWidth = ImGui::GetContentRegionAvail().x;
+    float spacing = ImGui::GetStyle().ItemSpacing.x;
+    float badgeWidth = BadgeWidth(badge);
+    float titleWidth = availableWidth - badgeWidth - spacing;
+
+    if (titleWidth < 80.0f)
+    {
+        ImGui::TextColored(ImVec4(0.70f, 0.78f, 0.88f, 1.0f), "%s", title);
+        TooltipIfHovered(tooltip);
+        StatusBadge(badge, badgeColor);
+        return;
+    }
+
+    ClippedText(id, title, titleWidth,
+                ImVec4(0.70f, 0.78f, 0.88f, 1.0f));
+    TooltipIfHovered(tooltip);
+    ImGui::SameLine();
+    StatusBadge(badge, badgeColor);
+}
+
+static bool CompactButtonWithTooltip(bool primary,
+                                     const char *label,
+                                     const char *tooltip,
+                                     const ImVec2 &size)
+{
+    bool clicked = primary ? PrimaryButton(label, size)
+                           : SecondaryButton(label, size);
+    TooltipIfHovered(tooltip);
+    return clicked;
+}
+
 static void OpenLibraryFolder(PdfLibrary &library,
                               PdfViewer &viewer,
                               SetlistManager &setlistManager,
@@ -540,15 +610,13 @@ void RenderLibraryPanel(PdfLibrary &library,
 
             if (library.IsLoaded())
             {
-                ImGui::TextColored(ImVec4(0.70f, 0.78f, 0.88f, 1.0f), "%s",
-                                   library.GetFolderName().c_str());
-                if (ImGui::IsItemHovered())
-                    ImGui::SetTooltip("%s", library.GetFolderPath().c_str());
-                ImGui::SameLine();
                 std::string countLabel =
                     std::to_string(library.GetFileCount()) + " PDFs";
-                StatusBadge(countLabel.c_str(),
-                            ImVec4(0.390f, 0.570f, 0.800f, 1.0f));
+                HeaderWithBadge("##LibraryFolderName",
+                                library.GetFolderName().c_str(),
+                                library.GetFolderPath().c_str(),
+                                countLabel.c_str(),
+                                ImVec4(0.350f, 0.730f, 0.710f, 1.0f));
 
                 ImGui::SetNextItemWidth(-1.0f);
                 ImGui::InputTextWithHint("##PdfSearch", "Search PDFs...",
@@ -826,13 +894,13 @@ void RenderLibraryPanel(PdfLibrary &library,
             if (selectedSetlist)
             {
                 ImGui::Spacing();
-                ImGui::TextColored(ImVec4(0.70f, 0.78f, 0.88f, 1.0f), "%s",
-                                   selectedSetlist->GetName().c_str());
-                ImGui::SameLine();
                 std::string itemCount =
                     std::to_string(selectedSetlist->GetItemCount()) + " items";
-                StatusBadge(itemCount.c_str(),
-                            ImVec4(0.48f, 0.76f, 0.56f, 1.0f));
+                HeaderWithBadge("##SelectedSetlistName",
+                                selectedSetlist->GetName().c_str(),
+                                selectedSetlist->GetName().c_str(),
+                                itemCount.c_str(),
+                                ImVec4(0.48f, 0.76f, 0.56f, 1.0f));
 
                 bool hasFiles = library.GetFileCount() > 0;
                 ImGui::BeginDisabled(!hasFiles);
@@ -846,8 +914,15 @@ void RenderLibraryPanel(PdfLibrary &library,
                         ? "Load a PDF folder first"
                         : files[static_cast<size_t>(comboFileIndex)]
                               .filename.c_str();
-                ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x -
-                                         58.0f);
+                float addRowWidth = ImGui::GetContentRegionAvail().x;
+                float addButtonWidth = 54.0f;
+                bool stackAddControls = addRowWidth < 240.0f;
+                float comboWidth =
+                    stackAddControls
+                        ? -1.0f
+                        : addRowWidth - addButtonWidth -
+                              ImGui::GetStyle().ItemSpacing.x;
+                ImGui::SetNextItemWidth(comboWidth);
                 if (ImGui::BeginCombo("##AddPdfToSetlist", previewName))
                 {
                     for (size_t i = 0; i < files.size(); i++)
@@ -863,8 +938,11 @@ void RenderLibraryPanel(PdfLibrary &library,
                     }
                     ImGui::EndCombo();
                 }
-                ImGui::SameLine();
-                if (PrimaryButton("Add", ImVec2(-1.0f, 0.0f)) &&
+                if (!stackAddControls)
+                    ImGui::SameLine();
+                if (PrimaryButton("Add", ImVec2(stackAddControls ? -1.0f
+                                                                 : addButtonWidth,
+                                                0.0f)) &&
                     !files.empty())
                     selectedSetlist->AddItem(
                         files[static_cast<size_t>(comboFileIndex)]);
@@ -997,13 +1075,61 @@ void RenderLibraryPanel(PdfLibrary &library,
                 ImGui::EndDisabled();
 
                 ImGui::SameLine();
+                static int pendingClearSetlistIndex = -1;
                 ImGui::BeginDisabled(selectedSetlist->GetItemCount() == 0);
                 if (DangerButton("Clear", ImVec2(-1.0f, 0.0f)))
                 {
-                    selectedSetlist->Clear();
-                    selectedSetlistItemIndex = -1;
+                    pendingClearSetlistIndex = selectedSetlistIndex;
+                    ImGui::OpenPopup("Clear Setlist");
                 }
                 ImGui::EndDisabled();
+
+                if (ImGui::BeginPopupModal("Clear Setlist", nullptr,
+                                           ImGuiWindowFlags_AlwaysAutoResize))
+                {
+                    bool canClear =
+                        pendingClearSetlistIndex >= 0 &&
+                        pendingClearSetlistIndex <
+                            static_cast<int>(
+                                setlistManager.GetSetlistCount());
+                    Setlist *pendingClearSetlist =
+                        canClear
+                            ? setlistManager.GetSetlist(static_cast<size_t>(
+                                  pendingClearSetlistIndex))
+                            : nullptr;
+
+                    if (pendingClearSetlist)
+                    {
+                        ImGui::Text("Clear all items from \"%s\"?",
+                                    pendingClearSetlist->GetName().c_str());
+                        ImGui::TextDisabled("This cannot be undone.");
+                        ImGui::Spacing();
+
+                        if (DangerButton("Clear", ImVec2(120.0f, 0.0f)))
+                        {
+                            pendingClearSetlist->Clear();
+                            if (selectedSetlistIndex ==
+                                pendingClearSetlistIndex)
+                                selectedSetlistItemIndex = -1;
+                            pendingClearSetlistIndex = -1;
+                            ImGui::CloseCurrentPopup();
+                        }
+
+                        ImGui::SameLine();
+                        if (SecondaryButton("Cancel", ImVec2(120.0f, 0.0f)))
+                        {
+                            pendingClearSetlistIndex = -1;
+                            ImGui::CloseCurrentPopup();
+                        }
+                    }
+                    else
+                    {
+                        pendingClearSetlistIndex = -1;
+                        ImGui::CloseCurrentPopup();
+                    }
+
+                    ImGui::EndPopup();
+                }
             }
             else
             {
@@ -1063,21 +1189,53 @@ void RenderDocumentToolbar(PdfViewer &viewer,
         bool allowKeyboardNavigation =
             !setlistManager.IsActive() || !uiState.notesInputActive;
 
-        ImGui::AlignTextToFramePadding();
-        ImGui::TextColored(ImVec4(0.70f, 0.78f, 0.88f, 1.0f), "%s",
-                           viewer.GetFilename().c_str());
-        if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("%s", viewer.GetFilename().c_str());
+        std::string pageLabel =
+            "Page " + std::to_string(viewer.GetCurrentPage() + 1) + " / " +
+            std::to_string(viewer.GetPageCount());
+        float spacing = ImGui::GetStyle().ItemSpacing.x;
+        float setlistWidth = 0.0f;
+        const Setlist *activeSetlist = nullptr;
+        std::string setlistBadge;
+        if (setlistManager.IsActive())
+        {
+            activeSetlist =
+                setlistManager.GetSetlist(static_cast<size_t>(
+                    setlistManager.GetActiveSetlistIndex()));
+            if (activeSetlist)
+            {
+                setlistBadge =
+                    "Setlist " +
+                    std::to_string(setlistManager.GetActiveItemIndex() + 1) +
+                    "/" + std::to_string(activeSetlist->GetItemCount());
+                setlistWidth = BadgeWidth(setlistBadge.c_str()) + 58.0f +
+                               spacing * 2.0f;
+            }
+        }
 
-        ImGui::SameLine();
-        ImGui::TextDisabled("Page %d / %d", viewer.GetCurrentPage() + 1,
-                            viewer.GetPageCount());
+        float fixedWidth = ImGui::CalcTextSize(pageLabel.c_str()).x +
+                           38.0f * 2.0f + 34.0f * 2.0f + 58.0f + 48.0f +
+                           38.0f + setlistWidth + spacing * 11.0f;
+        float titleWidth = ImGui::GetContentRegionAvail().x - fixedWidth;
+        bool showTitle = titleWidth >= 90.0f;
+
+        if (showTitle)
+        {
+            ClippedText("##ToolbarDocumentName",
+                        viewer.GetFilename().c_str(), titleWidth,
+                        ImVec4(0.70f, 0.78f, 0.88f, 1.0f));
+            ImGui::SameLine();
+        }
+
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextDisabled("%s", pageLabel.c_str());
 
         ImGui::SameLine();
         ImGui::Dummy(ImVec2(10.0f, 0.0f));
         ImGui::SameLine();
         ImGui::BeginDisabled(!canGoPrevious);
-        bool previousClicked = SecondaryButton("<<", ImVec2(42.0f, 0.0f));
+        bool previousClicked =
+            CompactButtonWithTooltip(false, "<##PreviousPage",
+                                     "Previous page", ImVec2(38.0f, 0.0f));
         bool previousKeyPressed = allowKeyboardNavigation &&
                                   ImGui::IsKeyPressed(ImGuiKey_LeftArrow);
         if (previousClicked || previousKeyPressed)
@@ -1091,7 +1249,9 @@ void RenderDocumentToolbar(PdfViewer &viewer,
 
         ImGui::SameLine();
         ImGui::BeginDisabled(!canGoNext);
-        bool nextClicked = SecondaryButton(">>", ImVec2(42.0f, 0.0f));
+        bool nextClicked =
+            CompactButtonWithTooltip(false, ">##NextPage", "Next page",
+                                     ImVec2(38.0f, 0.0f));
         bool nextKeyPressed = allowKeyboardNavigation &&
                               ImGui::IsKeyPressed(ImGuiKey_RightArrow);
         if (nextClicked || nextKeyPressed)
@@ -1106,18 +1266,21 @@ void RenderDocumentToolbar(PdfViewer &viewer,
         ImGui::SameLine();
         ImGui::Dummy(ImVec2(8.0f, 0.0f));
         ImGui::SameLine();
-        if (SubtleButton("-", ImVec2(36.0f, 0.0f)))
+        if (SubtleButton("-##ZoomOut", ImVec2(34.0f, 0.0f)))
             viewer.ZoomOut();
+        TooltipIfHovered("Zoom out");
         ImGui::SameLine();
-        ImGui::SetNextItemWidth(58.0f);
         ImGui::AlignTextToFramePadding();
         ImGui::Text("%.0f%%", viewer.GetZoom() * 100.0f);
+        TooltipIfHovered("Current zoom");
         ImGui::SameLine();
-        if (SubtleButton("+", ImVec2(36.0f, 0.0f)))
+        if (SubtleButton("+##ZoomIn", ImVec2(34.0f, 0.0f)))
             viewer.ZoomIn();
+        TooltipIfHovered("Zoom in");
         ImGui::SameLine();
-        if (SubtleButton("Reset", ImVec2(70.0f, 0.0f)))
+        if (SubtleButton("1:1##ResetZoom", ImVec2(48.0f, 0.0f)))
             viewer.ResetZoom();
+        TooltipIfHovered("Reset zoom");
 
         if (io.KeyCtrl && io.MouseWheel != 0.0f)
         {
@@ -1128,38 +1291,34 @@ void RenderDocumentToolbar(PdfViewer &viewer,
         }
 
         ImGui::SameLine();
-        if (SecondaryButton("Close", ImVec2(76.0f, 0.0f)))
+        if (SecondaryButton("X##ClosePdf", ImVec2(38.0f, 0.0f)))
             viewer.Close();
+        TooltipIfHovered("Close PDF");
 
-        if (setlistManager.IsActive())
+        if (activeSetlist)
         {
-            const Setlist *activeSetlist =
-                setlistManager.GetSetlist(static_cast<size_t>(
-                    setlistManager.GetActiveSetlistIndex()));
-            if (activeSetlist)
+            if (ImGui::GetContentRegionAvail().x >
+                BadgeWidth(setlistBadge.c_str()) + 68.0f)
             {
                 ImGui::SameLine();
-                std::string badge =
-                    "Setlist " +
-                    std::to_string(setlistManager.GetActiveItemIndex() + 1) +
-                    "/" + std::to_string(activeSetlist->GetItemCount());
-                StatusBadge(badge.c_str(),
+                StatusBadge(setlistBadge.c_str(),
                             ImVec4(0.48f, 0.76f, 0.56f, 1.0f));
-                if (ImGui::IsItemHovered())
-                    ImGui::SetTooltip("%s", activeSetlist->GetName().c_str());
+                TooltipIfHovered(activeSetlist->GetName().c_str());
                 ImGui::SameLine();
-                if (DangerButton("Stop", ImVec2(64.0f, 0.0f)))
-                    setlistManager.Deactivate();
             }
+
+            if (DangerButton("Stop##StopSetlist", ImVec2(58.0f, 0.0f)))
+                setlistManager.Deactivate();
+            TooltipIfHovered("Stop setlist");
         }
     }
     else
     {
-        ImGui::AlignTextToFramePadding();
-        ImGui::TextColored(ImVec4(0.55f, 0.58f, 0.64f, 1.0f),
-                           "No document loaded");
-        ImGui::SameLine();
-        ImGui::TextDisabled("Open a folder and choose a PDF from the Library tab.");
+        float messageWidth = ImGui::GetContentRegionAvail().x;
+        ClippedText("##NoDocumentMessage",
+                    "No document loaded - open a folder and choose a PDF from the Library tab.",
+                    messageWidth,
+                    ImVec4(0.55f, 0.58f, 0.64f, 1.0f));
     }
 
     ImGui::End();
@@ -1293,12 +1452,12 @@ void RenderNotesPanel(SetlistManager &setlistManager,
         mutSetlist->GetItems()[static_cast<size_t>(activeIdx)];
     ImGui::TextUnformatted("Notes");
     ImGui::Spacing();
-    ImGui::TextColored(ImVec4(0.70f, 0.78f, 0.88f, 1.0f), "%s",
-                       item.name.c_str());
     std::string itemBadge =
         "Item " + std::to_string(activeIdx + 1) + " / " +
         std::to_string(mutSetlist->GetItemCount());
-    StatusBadge(itemBadge.c_str(), ImVec4(0.48f, 0.76f, 0.56f, 1.0f));
+    HeaderWithBadge("##NotesItemName", item.name.c_str(),
+                    item.fullPath.c_str(), itemBadge.c_str(),
+                    ImVec4(0.48f, 0.76f, 0.56f, 1.0f));
     ImGui::Separator();
 
     static char notesBuf[4096] = "";

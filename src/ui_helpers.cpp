@@ -94,9 +94,9 @@ void StatusBadge(const char *label, const ImVec4 &color)
     ImVec4 bg = ImVec4(color.x, color.y, color.z, 0.18f);
     ImVec4 border = ImVec4(color.x, color.y, color.z, 0.42f);
     drawList->AddRectFilled(pos, ImVec2(pos.x + size.x, pos.y + size.y),
-                            ImGui::ColorConvertFloat4ToU32(bg), 99.0f);
+                            ImGui::ColorConvertFloat4ToU32(bg), 6.0f);
     drawList->AddRect(pos, ImVec2(pos.x + size.x, pos.y + size.y),
-                      ImGui::ColorConvertFloat4ToU32(border), 99.0f);
+                      ImGui::ColorConvertFloat4ToU32(border), 6.0f);
 
     ImVec2 textPos = ImVec2(pos.x + pad.x,
                             pos.y + (size.y - textSize.y) * 0.5f);
