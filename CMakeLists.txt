@@ -129,6 +129,16 @@ if(APPLE)
 endif()
 
 if(APPLE)
+    set(MACOS_APP_ICON "${CMAKE_SOURCE_DIR}/src/assets/macos/app_icon.icns")
+    set_source_files_properties("${MACOS_APP_ICON}" PROPERTIES
+        MACOSX_PACKAGE_LOCATION "Resources"
+    )
+    list(APPEND APP_SOURCES "${MACOS_APP_ICON}")
+elseif(WIN32)
+    list(APPEND APP_SOURCES src/windows/app_icon.rc)
+endif()
+
+if(APPLE)
     add_executable(PdfApp MACOSX_BUNDLE ${APP_SOURCES} ${APP_HEADERS})
 else()
     # Remove WIN32 to make the console show up on Windows.
@@ -171,6 +181,7 @@ if(APPLE)
         MACOSX_BUNDLE_BUNDLE_VERSION "1.0.0"
         MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0.0"
         MACOSX_BUNDLE_GUI_IDENTIFIER "com.pdfmanager.app"
+        MACOSX_BUNDLE_ICON_FILE "app_icon.icns"
         MACOSX_BUNDLE_INFO_PLIST "${CMAKE_SOURCE_DIR}/macos/Info.plist.in"
         BUILD_RPATH "@executable_path/../Frameworks"
         INSTALL_RPATH "@executable_path/../Frameworks"
