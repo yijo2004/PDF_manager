@@ -192,8 +192,10 @@ bool SetlistManager::LoadActiveItem(PdfViewer &viewer, int itemIndex)
 
     const SetlistItem &item =
         setlist->GetItems()[static_cast<size_t>(itemIndex)];
+    float currentZoom = viewer.GetZoom();
     if (!viewer.Load(item.fullPath))
         return false;
+    viewer.SetZoom(currentZoom);
 
     m_activeItemIndex = itemIndex;
     return true;
