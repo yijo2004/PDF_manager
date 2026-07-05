@@ -1,5 +1,6 @@
 # --- Build Artifacts ---
 build/
+build-macos/
 out/
 bin/
 *.exe
@@ -37,3 +38,6 @@ Thumbs.db
 # Keep the DLLs inside the vendor folder
 !vendor/**/bin/*.dll
 !pdfium.dll
+
+# Ignore AGENTS.md
+AGENTS.md
