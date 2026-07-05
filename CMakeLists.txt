@@ -106,7 +106,10 @@ set(APP_SOURCES
 # File dialogs have native implementations on Windows and macOS. Other
 # platforms continue to use the existing stub implementation.
 if(APPLE)
-    list(APPEND APP_SOURCES src/file_dialog_macos.mm)
+    list(APPEND APP_SOURCES
+        src/file_dialog_macos.mm
+        src/macos_window.mm
+    )
 else()
     list(APPEND APP_SOURCES src/file_dialog.cpp)
 endif()
@@ -120,6 +123,10 @@ set(APP_HEADERS
     src/file_dialog.h
     src/setlist_gen.h
 )
+
+if(APPLE)
+    list(APPEND APP_HEADERS src/macos_window.h)
+endif()
 
 if(APPLE)
     add_executable(PdfApp MACOSX_BUNDLE ${APP_SOURCES} ${APP_HEADERS})

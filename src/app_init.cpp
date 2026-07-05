@@ -26,6 +26,9 @@
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
 #include "ui_helpers.h"
+#ifdef __APPLE__
+#include "macos_window.h"
+#endif
 
 static void GlfwErrorCallback(int error, const char *description)
 {
@@ -105,6 +108,9 @@ GLFWwindow *InitWindow(int width, int height, const char *title)
     {
         glfwMakeContextCurrent(window);
         glfwSwapInterval(1); // VSync
+#ifdef __APPLE__
+        ConfigureMacOSWindow(window);
+#endif
     }
     return window;
 }
@@ -132,7 +138,12 @@ void InitImGui(GLFWwindow *window, const char *glslVersion)
     ImGuiIO &io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+#ifndef __APPLE__
+    // Detached ImGui platform windows can deadlock GLFW/Cocoa while the main
+    // window is entering or leaving native macOS fullscreen. Docking inside
+    // the main window remains available on macOS.
     io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
+#endif
 
     // Load custom font sizes with Korean support from the executable directory.
     const std::string fontPath = RuntimeAssetPath("font.ttf");
