@@ -10,6 +10,10 @@
 #include <windows.h>
 #endif
 
+#ifdef __APPLE__
+#include <mach-o/dyld.h>
+#endif
+
 #include <GLFW/glfw3.h>
 #include <fpdfview.h>
 
@@ -49,6 +53,19 @@ static std::string RuntimeAssetPath(const char *filename)
     exePath.resize(length);
     return (std::filesystem::path(exePath).parent_path() / filename).string();
 #else
+#ifdef __APPLE__
+    uint32_t pathSize = 0;
+    _NSGetExecutablePath(nullptr, &pathSize);
+    std::string executablePath(pathSize, '\0');
+    if (_NSGetExecutablePath(executablePath.data(), &pathSize) == 0)
+    {
+        executablePath.resize(pathSize > 0 ? pathSize - 1 : 0);
+        const std::filesystem::path resources =
+            std::filesystem::path(executablePath).parent_path().parent_path() /
+            "Resources";
+        return (resources / filename).string();
+    }
+#endif
     return filename;
 #endif
 }
@@ -59,8 +76,17 @@ GLFWwindow *InitWindow(int width, int height, const char *title)
     if (!glfwInit())
         return nullptr;
 
+#ifdef __APPLE__
+    // macOS exposes modern OpenGL only through a forward-compatible core
+    // profile. OpenGL 3.0/3.1 contexts are not available on macOS.
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
+#else
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
+#endif
 
     GLFWwindow *window =
         glfwCreateWindow(width, height, title, nullptr, nullptr);
@@ -84,6 +110,11 @@ void InitPDFium()
 
 void InitImGui(GLFWwindow *window, const char *glslVersion)
 {
+#ifdef __APPLE__
+    // Match the OpenGL 3.2 core profile requested by InitWindow().
+    glslVersion = "#version 150";
+#endif
+
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
 

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -426,6 +427,26 @@ bool SetlistManager::LoadFromFile(const std::string &filepath)
 
 std::string SetlistManager::GetDefaultSavePath()
 {
+#ifdef __APPLE__
+    // macOS application bundles are not a writable data location. Keep user
+    // data in the standard per-user Application Support directory instead.
+    if (const char *home = std::getenv("HOME"))
+    {
+        try
+        {
+            const std::filesystem::path dataDirectory =
+                std::filesystem::path(home) / "Library" /
+                "Application Support" / "PDF Manager";
+            std::filesystem::create_directories(dataDirectory);
+            return (dataDirectory / "setlists.dat").string();
+        }
+        catch (const std::filesystem::filesystem_error &)
+        {
+            // Fall through to the existing working-directory behavior.
+        }
+    }
+#endif
+
     // Save next to the executable
     try
     {

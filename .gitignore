@@ -1,5 +1,6 @@
 # --- Build Artifacts ---
 build/
+build-macos/
 out/
 bin/
 *.exe
