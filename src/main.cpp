@@ -192,7 +192,7 @@ int main(int, char **)
     }
 
     // Auto-save setlists on exit
-    if (uiState.autoSaveSetlists && setlistManager.GetSetlistCount() > 0)
+    if (uiState.autoSaveSetlists)
     {
         std::string savePath = SetlistManager::GetDefaultSavePath();
         if (setlistManager.SaveToFile(savePath))

@@ -111,6 +111,11 @@ public:
      */
     bool RemoveSetlist(size_t index);
 
+    /** Mutate setlist items while keeping active playback indices valid. */
+    bool RemoveItem(size_t setlistIndex, size_t itemIndex);
+    bool MoveItem(size_t setlistIndex, size_t fromIndex, size_t toIndex);
+    bool ClearSetlist(size_t setlistIndex);
+
     size_t GetSetlistCount() const { return m_setlists.size(); }
     const std::vector<Setlist> &GetSetlists() const { return m_setlists; }
 

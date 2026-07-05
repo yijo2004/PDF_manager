@@ -1,9 +1,12 @@
 #include "pdf_viewer.h"
 
+#include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 
 PdfViewer::PdfViewer() {}
 
@@ -11,9 +14,6 @@ PdfViewer::~PdfViewer() { Close(); }
 
 bool PdfViewer::Load(const std::string &filepath)
 {
-    // Close any existing document first
-    Close();
-
     // Read file into memory to avoid path encoding issues on Windows
     std::filesystem::path path(filepath);
     std::ifstream file(path, std::ios::binary | std::ios::ate);
@@ -24,29 +24,45 @@ bool PdfViewer::Load(const std::string &filepath)
     }
 
     std::streamsize fileSize = file.tellg();
+    if (fileSize <= 0 ||
+        fileSize > static_cast<std::streamsize>(
+                       (std::numeric_limits<int>::max)()))
+    {
+        printf("[PdfViewer] Invalid or unsupported file size\n");
+        return false;
+    }
     file.seekg(0, std::ios::beg);
 
-    m_pdfData.resize(static_cast<size_t>(fileSize));
-    if (!file.read(reinterpret_cast<char *>(m_pdfData.data()), fileSize))
+    std::vector<unsigned char> pdfData(static_cast<size_t>(fileSize));
+    if (!file.read(reinterpret_cast<char *>(pdfData.data()), fileSize))
     {
         printf("[PdfViewer] Failed to read file contents\n");
-        m_pdfData.clear();
         return false;
     }
     file.close();
 
     // Load PDF from memory
-    m_document = FPDF_LoadMemDocument(
-        m_pdfData.data(), static_cast<int>(m_pdfData.size()), nullptr);
-    if (!m_document)
+    FPDF_DOCUMENT document = FPDF_LoadMemDocument(
+        pdfData.data(), static_cast<int>(pdfData.size()), nullptr);
+    if (!document)
     {
         unsigned long error = FPDF_GetLastError();
         printf("[PdfViewer] Failed to load PDF: error code %lu\n", error);
-        m_pdfData.clear();
         return false;
     }
 
-    m_pageCount = FPDF_GetPageCount(m_document);
+    const int pageCount = FPDF_GetPageCount(document);
+    if (pageCount <= 0)
+    {
+        printf("[PdfViewer] PDF contains no readable pages\n");
+        FPDF_CloseDocument(document);
+        return false;
+    }
+
+    Close();
+    m_pdfData = std::move(pdfData);
+    m_document = document;
+    m_pageCount = pageCount;
     m_currentPage = 0;
     m_zoomLevel = 1.0f;
 
@@ -55,10 +71,15 @@ bool PdfViewer::Load(const std::string &filepath)
     m_filename = (lastSlash != std::string::npos)
                      ? filepath.substr(lastSlash + 1)
                      : filepath;
+    m_filepath = filepath;
 
     // Render the first page
-    m_needsRender = true;
-    RenderPageToTexture();
+    if (!RenderPageToTexture())
+    {
+        Close();
+        return false;
+    }
+    m_needsRender = false;
 
     return true;
 }
@@ -84,6 +105,7 @@ void PdfViewer::Close()
     m_zoomLevel = 1.0f;
     m_needsRender = false;
     m_filename.clear();
+    m_filepath.clear();
     m_pageNativeWidth = 0.0;
     m_pageNativeHeight = 0.0;
 }
@@ -147,10 +169,10 @@ void PdfViewer::Update()
     }
 }
 
-void PdfViewer::RenderPageToTexture()
+bool PdfViewer::RenderPageToTexture()
 {
     if (!m_document || m_currentPage < 0 || m_currentPage >= m_pageCount)
-        return;
+        return false;
 
     // Close previous page if open
     if (m_page)
@@ -164,33 +186,50 @@ void PdfViewer::RenderPageToTexture()
     if (!m_page)
     {
         printf("[PdfViewer] Failed to load page %d\n", m_currentPage);
-        return;
+        CleanupTexture();
+        return false;
     }
 
     // Get page dimensions and store native size
     double pageWidth = FPDF_GetPageWidth(m_page);
     double pageHeight = FPDF_GetPageHeight(m_page);
+    if (!std::isfinite(pageWidth) || !std::isfinite(pageHeight) ||
+        pageWidth <= 0.0 || pageHeight <= 0.0)
+    {
+        printf("[PdfViewer] Invalid page dimensions\n");
+        CleanupTexture();
+        return false;
+    }
     m_pageNativeWidth = pageWidth;
     m_pageNativeHeight = pageHeight;
 
     // Render at fixed high-quality scale (independent of display zoom)
-    int renderWidth = static_cast<int>(pageWidth * BASE_RENDER_SCALE);
-    int renderHeight = static_cast<int>(pageHeight * BASE_RENDER_SCALE);
-
-    // Clamp to reasonable size
     const int MAX_TEXTURE_SIZE = 4096;
-    if (renderWidth > MAX_TEXTURE_SIZE)
-        renderWidth = MAX_TEXTURE_SIZE;
-    if (renderHeight > MAX_TEXTURE_SIZE)
-        renderHeight = MAX_TEXTURE_SIZE;
+    const double renderScale =
+        (std::min)(BASE_RENDER_SCALE,
+                   (std::min)(static_cast<double>(MAX_TEXTURE_SIZE) / pageWidth,
+                              static_cast<double>(MAX_TEXTURE_SIZE) /
+                                  pageHeight));
+    const int renderWidth = (std::max)(
+        1, static_cast<int>(std::lround(pageWidth * renderScale)));
+    const int renderHeight = (std::max)(
+        1, static_cast<int>(std::lround(pageHeight * renderScale)));
 
     // Allocate bitmap buffer (BGRA format)
-    int stride = renderWidth * 4;
-    std::vector<unsigned char> buffer(stride * renderHeight, 0xFF);
+    const int stride = renderWidth * 4;
+    std::vector<unsigned char> buffer(
+        static_cast<size_t>(stride) * static_cast<size_t>(renderHeight),
+        0xFF);
 
     // Create PDFium bitmap pointing to our buffer
     FPDF_BITMAP bitmap = FPDFBitmap_CreateEx(
         renderWidth, renderHeight, FPDFBitmap_BGRA, buffer.data(), stride);
+    if (!bitmap)
+    {
+        printf("[PdfViewer] Failed to allocate page bitmap\n");
+        CleanupTexture();
+        return false;
+    }
 
     // Fill background white
     FPDFBitmap_FillRect(bitmap, 0, 0, renderWidth, renderHeight, 0xFFFFFFFF);
@@ -227,4 +266,5 @@ void PdfViewer::RenderPageToTexture()
 
     // Cleanup PDFium bitmap
     FPDFBitmap_Destroy(bitmap);
+    return true;
 }

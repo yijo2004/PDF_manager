@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -69,6 +70,22 @@ static std::string RuntimeSiblingPath(const char *filename)
 
 static std::string UiSettingsPath()
 {
+#ifdef __APPLE__
+    if (const char *home = std::getenv("HOME"))
+    {
+        try
+        {
+            const std::filesystem::path dataDirectory =
+                std::filesystem::path(home) / "Library" /
+                "Application Support" / "PDF Manager";
+            std::filesystem::create_directories(dataDirectory);
+            return (dataDirectory / "ui_settings.dat").string();
+        }
+        catch (const std::filesystem::filesystem_error &)
+        {
+        }
+    }
+#endif
     return RuntimeSiblingPath("ui_settings.dat");
 }
 
@@ -202,12 +219,35 @@ static void OpenLibraryFolder(PdfLibrary &library,
                               int &selectedFileIndex)
 {
     std::string folderPath = FileDialog::OpenFolder();
-    if (!folderPath.empty())
+    if (!folderPath.empty() && library.LoadFolder(folderPath))
     {
-        library.LoadFolder(folderPath);
         selectedFileIndex = -1;
         setlistManager.Deactivate();
         viewer.Close();
+    }
+}
+
+static void RefreshLibrary(PdfLibrary &library, int &selectedFileIndex)
+{
+    std::string selectedPath;
+    const auto &oldFiles = library.GetFiles();
+    if (selectedFileIndex >= 0 &&
+        selectedFileIndex < static_cast<int>(oldFiles.size()))
+        selectedPath = oldFiles[static_cast<size_t>(selectedFileIndex)].fullPath;
+
+    library.Refresh();
+    selectedFileIndex = -1;
+    if (selectedPath.empty())
+        return;
+
+    const auto &newFiles = library.GetFiles();
+    for (size_t i = 0; i < newFiles.size(); i++)
+    {
+        if (newFiles[i].fullPath == selectedPath)
+        {
+            selectedFileIndex = static_cast<int>(i);
+            break;
+        }
     }
 }
 
@@ -365,7 +405,22 @@ static void RenderSettingsPopup(AppUiState &uiState)
 
 bool LoadUiSettings(AppUiState &uiState)
 {
-    std::ifstream in(std::filesystem::path(UiSettingsPath()), std::ios::in);
+    const std::string settingsPath = UiSettingsPath();
+    std::ifstream in(std::filesystem::path(settingsPath), std::ios::in);
+#ifdef __APPLE__
+    // Older macOS builds stored settings relative to their working directory.
+    // Read that location as a migration fallback, but save to Application
+    // Support from now on.
+    if (!in.is_open())
+    {
+        const std::string legacyPath = RuntimeSiblingPath("ui_settings.dat");
+        if (legacyPath != settingsPath)
+        {
+            in.clear();
+            in.open(std::filesystem::path(legacyPath), std::ios::in);
+        }
+    }
+#endif
     if (!in.is_open())
         return false;
 
@@ -462,7 +517,10 @@ bool SaveUiSettings(const AppUiState &uiState)
     out << "lastLibraryPath=" << uiState.lastLibraryPath << "\n";
     out << "lastSetlistIndex=" << uiState.lastSetlistIndex << "\n";
     out << "lastSetlistName=" << uiState.lastSetlistName << "\n";
-    return true;
+    out.flush();
+    const bool writeSucceeded = out.good();
+    out.close();
+    return writeSucceeded && !out.fail();
 }
 
 // =============================================================================
@@ -487,11 +545,10 @@ void RenderMainMenuBar(PdfLibrary &library,
 
             if (ImGui::MenuItem("Refresh Library", nullptr, false,
                                 library.IsLoaded()))
-                library.Refresh();
+                RefreshLibrary(library, selectedFileIndex);
 
             ImGui::Separator();
-            if (ImGui::MenuItem("Save Setlists", nullptr, false,
-                                setlistManager.GetSetlistCount() > 0))
+            if (ImGui::MenuItem("Save Setlists"))
                 SaveSetlists(setlistManager, uiState);
 
             if (ImGui::MenuItem("Load Setlists"))
@@ -501,7 +558,10 @@ void RenderMainMenuBar(PdfLibrary &library,
             ImGui::Separator();
             if (ImGui::MenuItem("Close PDF", nullptr, false,
                                 viewer.IsLoaded()))
+            {
+                setlistManager.Deactivate();
                 viewer.Close();
+            }
 
             ImGui::EndMenu();
         }
@@ -603,7 +663,7 @@ void RenderLibraryPanel(PdfLibrary &library,
             ImGui::SameLine();
             ImGui::BeginDisabled(!library.IsLoaded());
             if (SecondaryButton("Refresh", ImVec2(-1.0f, 0.0f)))
-                library.Refresh();
+                RefreshLibrary(library, selectedIndex);
             ImGui::EndDisabled();
 
             ImGui::Spacing();
@@ -643,7 +703,7 @@ void RenderLibraryPanel(PdfLibrary &library,
                                           ImGuiSelectableFlags_AllowDoubleClick))
                     {
                         selectedIndex = static_cast<int>(i);
-                        if (viewer.GetFilename() != entry.filename)
+                        if (viewer.GetFilepath() != entry.fullPath)
                         {
                             setlistManager.Deactivate();
                             viewer.Load(entry.fullPath);
@@ -1034,7 +1094,8 @@ void RenderLibraryPanel(PdfLibrary &library,
                 ImGui::BeginDisabled(!canMoveUp);
                 if (SecondaryButton("Up", ImVec2(thirdWidth, 0.0f)))
                 {
-                    selectedSetlist->MoveItem(
+                    setlistManager.MoveItem(
+                        static_cast<size_t>(selectedSetlistIndex),
                         static_cast<size_t>(selectedSetlistItemIndex),
                         static_cast<size_t>(selectedSetlistItemIndex - 1));
                     selectedSetlistItemIndex--;
@@ -1049,7 +1110,8 @@ void RenderLibraryPanel(PdfLibrary &library,
                 ImGui::BeginDisabled(!canMoveDown);
                 if (SecondaryButton("Down", ImVec2(-1.0f, 0.0f)))
                 {
-                    selectedSetlist->MoveItem(
+                    setlistManager.MoveItem(
+                        static_cast<size_t>(selectedSetlistIndex),
                         static_cast<size_t>(selectedSetlistItemIndex),
                         static_cast<size_t>(selectedSetlistItemIndex + 1));
                     selectedSetlistItemIndex++;
@@ -1062,7 +1124,8 @@ void RenderLibraryPanel(PdfLibrary &library,
                     0.5f;
                 if (DangerButton("Remove Item", ImVec2(halfWidth, 0.0f)))
                 {
-                    selectedSetlist->RemoveItem(
+                    setlistManager.RemoveItem(
+                        static_cast<size_t>(selectedSetlistIndex),
                         static_cast<size_t>(selectedSetlistItemIndex));
                     if (selectedSetlistItemIndex >=
                         static_cast<int>(selectedSetlist->GetItemCount()))
@@ -1107,7 +1170,8 @@ void RenderLibraryPanel(PdfLibrary &library,
 
                         if (DangerButton("Clear", ImVec2(120.0f, 0.0f)))
                         {
-                            pendingClearSetlist->Clear();
+                            setlistManager.ClearSetlist(
+                                static_cast<size_t>(pendingClearSetlistIndex));
                             if (selectedSetlistIndex ==
                                 pendingClearSetlistIndex)
                                 selectedSetlistItemIndex = -1;
@@ -1292,7 +1356,10 @@ void RenderDocumentToolbar(PdfViewer &viewer,
 
         ImGui::SameLine();
         if (SecondaryButton("X##ClosePdf", ImVec2(38.0f, 0.0f)))
+        {
+            setlistManager.Deactivate();
             viewer.Close();
+        }
         TooltipIfHovered("Close PDF");
 
         if (activeSetlist)
@@ -1463,9 +1530,11 @@ void RenderNotesPanel(SetlistManager &setlistManager,
     static char notesBuf[4096] = "";
     static int lastActiveSetlist = -1;
     static int lastActiveItem = -1;
+    static std::string lastActiveItemPath;
 
     int curSetlist = setlistManager.GetActiveSetlistIndex();
-    if (curSetlist != lastActiveSetlist || activeIdx != lastActiveItem)
+    if (curSetlist != lastActiveSetlist || activeIdx != lastActiveItem ||
+        item.fullPath != lastActiveItemPath)
     {
         const std::string &notes =
             mutSetlist->GetItemNotes(static_cast<size_t>(activeIdx));
@@ -1476,6 +1545,7 @@ void RenderNotesPanel(SetlistManager &setlistManager,
         notesBuf[copyLen] = '\0';
         lastActiveSetlist = curSetlist;
         lastActiveItem = activeIdx;
+        lastActiveItemPath = item.fullPath;
     }
 
     ImVec2 notesSize = ImVec2(-1.0f, ImGui::GetContentRegionAvail().y);

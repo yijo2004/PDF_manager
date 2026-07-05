@@ -8,6 +8,16 @@
 #include <iostream>
 #include <sstream>
 
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
+
 Setlist::Setlist(const std::string &name) : m_name(name) {}
 
 bool Setlist::AddItem(const PdfEntry &entry)
@@ -20,7 +30,7 @@ bool Setlist::AddItem(const std::string &name, const std::string &fullPath)
     if (fullPath.empty())
         return false;
 
-    m_items.push_back({name, fullPath});
+    m_items.push_back({name, fullPath, {}});
     return true;
 }
 
@@ -94,6 +104,60 @@ bool SetlistManager::RemoveSetlist(size_t index)
     }
 
     m_setlists.erase(m_setlists.begin() + static_cast<std::ptrdiff_t>(index));
+    return true;
+}
+
+bool SetlistManager::RemoveItem(size_t setlistIndex, size_t itemIndex)
+{
+    Setlist *setlist = GetSetlist(setlistIndex);
+    if (!setlist || itemIndex >= setlist->GetItemCount())
+        return false;
+
+    if (static_cast<int>(setlistIndex) == m_activeSetlistIndex)
+    {
+        const int removedIndex = static_cast<int>(itemIndex);
+        if (removedIndex == m_activeItemIndex)
+            Deactivate();
+        else if (removedIndex < m_activeItemIndex)
+            m_activeItemIndex--;
+    }
+
+    return setlist->RemoveItem(itemIndex);
+}
+
+bool SetlistManager::MoveItem(size_t setlistIndex,
+                              size_t fromIndex,
+                              size_t toIndex)
+{
+    Setlist *setlist = GetSetlist(setlistIndex);
+    if (!setlist || fromIndex >= setlist->GetItemCount() ||
+        toIndex >= setlist->GetItemCount())
+        return false;
+
+    if (static_cast<int>(setlistIndex) == m_activeSetlistIndex)
+    {
+        const int from = static_cast<int>(fromIndex);
+        const int to = static_cast<int>(toIndex);
+        if (m_activeItemIndex == from)
+            m_activeItemIndex = to;
+        else if (from < m_activeItemIndex && to >= m_activeItemIndex)
+            m_activeItemIndex--;
+        else if (from > m_activeItemIndex && to <= m_activeItemIndex)
+            m_activeItemIndex++;
+    }
+
+    return setlist->MoveItem(fromIndex, toIndex);
+}
+
+bool SetlistManager::ClearSetlist(size_t setlistIndex)
+{
+    Setlist *setlist = GetSetlist(setlistIndex);
+    if (!setlist)
+        return false;
+
+    if (static_cast<int>(setlistIndex) == m_activeSetlistIndex)
+        Deactivate();
+    setlist->Clear();
     return true;
 }
 
@@ -291,10 +355,39 @@ bool SetlistManager::CanGoPrevious(const PdfViewer &viewer) const
 //   END
 //
 
+namespace
+{
+bool ReplaceSaveFile(const std::filesystem::path &temporaryPath,
+                     const std::filesystem::path &destinationPath)
+{
+#ifdef _WIN32
+    if (MoveFileExW(temporaryPath.c_str(), destinationPath.c_str(),
+                    MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
+        return true;
+
+    std::error_code cleanupError;
+    std::filesystem::remove(temporaryPath, cleanupError);
+    return false;
+#else
+    std::error_code renameError;
+    std::filesystem::rename(temporaryPath, destinationPath, renameError);
+    if (!renameError)
+        return true;
+
+    std::error_code cleanupError;
+    std::filesystem::remove(temporaryPath, cleanupError);
+    return false;
+#endif
+}
+} // namespace
+
 bool SetlistManager::SaveToFile(const std::string &filepath) const
 {
-    std::ofstream out(std::filesystem::path(filepath),
-                      std::ios::out | std::ios::trunc);
+    const std::filesystem::path destinationPath(filepath);
+    std::filesystem::path temporaryPath = destinationPath;
+    temporaryPath += ".tmp";
+
+    std::ofstream out(temporaryPath, std::ios::out | std::ios::trunc);
     if (!out.is_open())
     {
         std::cerr << "[SetlistManager] Failed to save: " << filepath << "\n";
@@ -333,7 +426,25 @@ bool SetlistManager::SaveToFile(const std::string &filepath) const
     }
 
     out << "END\n";
+    out.flush();
+    const bool writeSucceeded = out.good();
     out.close();
+    if (!writeSucceeded || out.fail())
+    {
+        std::error_code cleanupError;
+        std::filesystem::remove(temporaryPath, cleanupError);
+        std::cerr << "[SetlistManager] Failed while writing: " << filepath
+                  << "\n";
+        return false;
+    }
+
+    if (!ReplaceSaveFile(temporaryPath, destinationPath))
+    {
+        std::cerr << "[SetlistManager] Failed to replace save file: "
+                  << filepath << "\n";
+        return false;
+    }
+
     return true;
 }
 
@@ -356,23 +467,24 @@ bool SetlistManager::LoadFromFile(const std::string &filepath)
         return false;
     }
 
-    // Clear existing setlists before loading
-    Deactivate();
-    m_setlists.clear();
-
+    std::vector<Setlist> loadedSetlists;
     Setlist *current = nullptr;
+    bool foundEnd = false;
 
     while (std::getline(in, line))
     {
         if (line == "END")
+        {
+            foundEnd = true;
             break;
+        }
 
         if (line.rfind("SETLIST:", 0) == 0)
         {
             // New setlist — name is everything after "SETLIST:"
             std::string name = line.substr(8);
-            m_setlists.emplace_back(name);
-            current = &m_setlists.back();
+            loadedSetlists.emplace_back(name);
+            current = &loadedSetlists.back();
         }
         else if (line.rfind("ITEM:", 0) == 0 && current)
         {
@@ -423,7 +535,15 @@ bool SetlistManager::LoadFromFile(const std::string &filepath)
         // Skip unknown lines gracefully
     }
 
+    if (!foundEnd || in.bad())
+    {
+        std::cerr << "[SetlistManager] Incomplete or unreadable save file\n";
+        return false;
+    }
+
     in.close();
+    Deactivate();
+    m_setlists = std::move(loadedSetlists);
     return true;
 }
 

@@ -90,6 +90,7 @@ public:
     // --- Document Info ---
     
     const std::string& GetFilename() const { return m_filename; }
+    const std::string& GetFilepath() const { return m_filepath; }
     
     /**
      * @brief Get the native page width in PDF points (72 DPI).
@@ -102,7 +103,7 @@ public:
     double GetPageNativeHeight() const { return m_pageNativeHeight; }
 
 private:
-    void RenderPageToTexture();
+    bool RenderPageToTexture();
     void CleanupTexture();
 
     // PDFium handles
@@ -123,6 +124,7 @@ private:
     float m_zoomLevel = 1.0f;
     bool m_needsRender = false;
     std::string m_filename;
+    std::string m_filepath;
     
     // Native page dimensions (PDF points)
     double m_pageNativeWidth = 0.0;

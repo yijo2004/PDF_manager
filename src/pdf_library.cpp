@@ -27,19 +27,45 @@ namespace
     {
         return path.filename().string();
     }
+
+    bool CaseInsensitiveFilenameLess(const PdfEntry &left,
+                                     const PdfEntry &right)
+    {
+        const size_t sharedLength =
+            (std::min)(left.filename.size(), right.filename.size());
+
+        for (size_t i = 0; i < sharedLength; i++)
+        {
+            const auto leftChar = static_cast<unsigned char>(left.filename[i]);
+            const auto rightChar =
+                static_cast<unsigned char>(right.filename[i]);
+            const int foldedLeft = std::tolower(leftChar);
+            const int foldedRight = std::tolower(rightChar);
+
+            if (foldedLeft != foldedRight)
+                return foldedLeft < foldedRight;
+        }
+
+        if (left.filename.size() != right.filename.size())
+            return left.filename.size() < right.filename.size();
+
+        // Keep the order deterministic when filenames differ only by case.
+        return left.filename < right.filename;
+    }
 } // namespace
 
 bool PdfLibrary::LoadFolder(const std::string &folderPath)
 {
-    Clear();
-
     // Validate the folder exists
     fs::path path(folderPath);
-    if (!fs::exists(path) || !fs::is_directory(path))
+    std::error_code pathError;
+    if (!fs::exists(path, pathError) || pathError ||
+        !fs::is_directory(path, pathError) || pathError)
     {
         return false;
     }
 
+    Clear();
     m_folderPath = folderPath;
     m_folderName = path.filename().string();
 
@@ -93,4 +119,6 @@ void PdfLibrary::ScanFolder()
         // Silently handle permission errors, etc.
         // TODO: Handle errors
     }
+
+    std::sort(m_files.begin(), m_files.end(), CaseInsensitiveFilenameLess);
 }
